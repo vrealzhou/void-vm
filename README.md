@@ -1,4 +1,4 @@
-# vfkit-cachy
+# void-vm
 
 Use `vfkit` on Apple Silicon macOS to run a fixed-IP `arm64` Linux development VM.
 
@@ -59,7 +59,7 @@ go run ./cmd/vmctl start
 
 On the first successful `start`, `vmctl` will:
 
-1. Download the official Void rootfs into `~/vms/vfkit-cachy/images/`
+1. Download the official Void rootfs into the repo-root `images/` directory by default
 2. Build a raw disk
 3. Write users, passwords, SSH keys, fixed networking, GUI, and system configuration offline
 4. Extract `vmlinuz` and `initramfs`
@@ -92,7 +92,7 @@ go run ./cmd/vmctl ip
 Default directories:
 
 ```text
-~/vms/vfkit-cachy/images/
+images/
 
 .vm/
   void-dev/
@@ -151,7 +151,7 @@ Meaning:
 Bootstrap configures:
 
 - `fish`
-- `oh-my-posh` with the `unicorn` theme
+- `starship` with the Tokyo Night preset
 - `Rust` and `cargo`
 - `Homebrew for Linux`
 - `Neovim`
@@ -181,6 +181,7 @@ Browser notes:
 ## Customization
 
 Put overrides in a repo-root `.vmctl.env`. Any value you omit keeps the code default.
+Use absolute paths in `.vmctl.env` when you override file locations. The loader does not expand `~` or `$HOME`.
 
 You can start from the template:
 
@@ -189,7 +190,7 @@ cp .vmctl.env.example .vmctl.env
 ```
 
 Template file:
-[.vmctl.env.example](/Users/zhouye/vms/vfkit-cachy/.vmctl.env.example)
+[.vmctl.env.example](/Users/zhouye/vms/vfkit-void/.vmctl.env.example)
 
 ### Resources
 
@@ -216,7 +217,7 @@ VM_SSH_USER=dev
 VM_GUEST_USER=dev
 VM_GUEST_PASSWORD=dev
 VM_ROOT_PASSWORD=root
-VM_SSH_PUBLIC_KEY=/Users/zhouye/.ssh/id_ed25519.pub
+VM_SSH_PUBLIC_KEY=/absolute/path/to/id_ed25519.pub
 VM_SSH_KNOWN_HOSTS_FILE=/absolute/path/to/known_hosts
 ```
 
@@ -232,12 +233,12 @@ UserKnownHostsFile=/dev/null
 Default values:
 
 ```bash
-VM_IMAGE_DIR=/Users/zhouye/vms/vfkit-cachy/images
-VM_BASE_IMAGE=/Users/zhouye/vms/vfkit-cachy/images/void-aarch64-ROOTFS-20250202.tar.xz
+VM_IMAGE_DIR=/absolute/path/to/void-vm/images
+VM_BASE_IMAGE=/absolute/path/to/void-vm/images/void-aarch64-ROOTFS-20250202.tar.xz
 VM_BASE_IMAGE_URL=https://repo-default.voidlinux.org/live/current/void-aarch64-ROOTFS-20250202.tar.xz
 ```
 
-If you already have a disk image, you can just set:
+By default, `vmctl` resolves `VM_IMAGE_DIR` to the repo-root `images/` directory. If you already have a disk image elsewhere, you can just set:
 
 ```bash
 VM_BASE_IMAGE=/absolute/path/to/custom.img
@@ -247,10 +248,13 @@ VM_BASE_IMAGE=/absolute/path/to/custom.img
 
 ```bash
 VM_TIMEZONE=Australia/Sydney
+VM_STARSHIP_PRESET_URL=https://starship.rs/presets/toml/tokyo-night.toml
 VM_GUI=1
 VM_WIDTH=1920
 VM_HEIGHT=1200
 ```
+
+Bootstrap writes the prompt config to `~/.config/starship.toml` and enables it from Fish with `starship init fish | source`. The Tokyo Night preset uses Nerd Font symbols, so make sure your terminal font supports them.
 
 For 4K:
 
@@ -289,7 +293,7 @@ Rules:
 - if the command already exists, bootstrap skips that package
 
 If you want to hard-code the default package list in the script, edit:
-[scripts/guest-bootstrap.sh](/Users/zhouye/vms/vfkit-cachy/scripts/guest-bootstrap.sh)
+[scripts/guest-bootstrap.sh](/Users/zhouye/vms/vfkit-void/scripts/guest-bootstrap.sh)
 
 ## Git Configuration
 
@@ -349,13 +353,13 @@ go run ./cmd/vmctl start
 
 Useful state files:
 
-- Log: [.vm/void-dev/vfkit.log](/Users/zhouye/vms/vfkit-cachy/.vm/void-dev/vfkit.log)
-- Serial log: [.vm/void-dev/serial.log](/Users/zhouye/vms/vfkit-cachy/.vm/void-dev/serial.log)
+- Log: [.vm/void-dev/vfkit.log](/Users/zhouye/vms/vfkit-void/.vm/void-dev/vfkit.log)
+- Serial log: [.vm/void-dev/serial.log](/Users/zhouye/vms/vfkit-void/.vm/void-dev/serial.log)
 
 ## E2E
 
 End-to-end test script:
-[scripts/e2e-test.sh](/Users/zhouye/vms/vfkit-cachy/scripts/e2e-test.sh)
+[scripts/e2e-test.sh](/Users/zhouye/vms/vfkit-void/scripts/e2e-test.sh)
 
 Run:
 

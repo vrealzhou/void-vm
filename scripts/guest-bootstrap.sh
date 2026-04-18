@@ -4,8 +4,7 @@ set -euo pipefail
 
 TARGET_USER="${TARGET_USER:-$(id -un)}"
 TARGET_HOME="${TARGET_HOME:-$(eval echo "~${TARGET_USER}")}"
-OMP_THEME_URL="${OMP_THEME_URL:-https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/unicorn.omp.json}"
-OMP_THEME_NAME="${OMP_THEME_NAME:-unicorn.omp.json}"
+STARSHIP_PRESET_URL="${STARSHIP_PRESET_URL:-https://starship.rs/presets/toml/tokyo-night.toml}"
 SET_DEFAULT_SHELL="${SET_DEFAULT_SHELL:-1}"
 HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/home/linuxbrew/.linuxbrew}"
 BOOTSTRAP_DNS_SERVERS="${BOOTSTRAP_DNS_SERVERS:-1.1.1.1 8.8.8.8}"
@@ -17,11 +16,12 @@ BOOTSTRAP_CARGO_PACKAGES="${BOOTSTRAP_CARGO_PACKAGES:-}"
 GIT_USER_NAME="${GIT_USER_NAME:-}"
 GIT_USER_EMAIL="${GIT_USER_EMAIL:-}"
 
-OMP_THEME_DIR="${TARGET_HOME}/.config/oh-my-posh"
-OMP_THEME_PATH="${OMP_THEME_DIR}/${OMP_THEME_NAME}"
+STARSHIP_CONFIG_PATH="${TARGET_HOME}/.config/starship.toml"
 FISH_CONFIG_DIR="${TARGET_HOME}/.config/fish"
-FISH_CONFIG_SNIPPET="${FISH_CONFIG_DIR}/conf.d/oh-my-posh.fish"
+FISH_CONFIG_SNIPPET="${FISH_CONFIG_DIR}/conf.d/starship.fish"
 FISH_SWAY_AUTOSTART_SNIPPET="${FISH_CONFIG_DIR}/conf.d/vmctl-sway-autostart.fish"
+LEGACY_OMP_THEME_DIR="${TARGET_HOME}/.config/oh-my-posh"
+LEGACY_OMP_SNIPPET="${FISH_CONFIG_DIR}/conf.d/oh-my-posh.fish"
 RUSTUP_HOME="${TARGET_HOME}/.rustup"
 CARGO_HOME="${TARGET_HOME}/.cargo"
 LOCAL_BIN_DIR="${TARGET_HOME}/.local/bin"
@@ -146,20 +146,13 @@ repair_resolv_conf() {
   printf '%s' "${resolv_conf}" | as_root tee /etc/resolv.conf >/dev/null
 }
 
-install_oh_my_posh() {
+install_starship() {
   retry_as_target_shell "
     export HOME=${TARGET_HOME@Q}
-    mkdir -p ${LOCAL_BIN_DIR@Q}
-    arch=\$(uname -m | tr '[:upper:]' '[:lower:]')
-    case \"\${arch}\" in
-      x86_64) arch=amd64 ;;
-      arm64|aarch64) arch=arm64 ;;
-      armv*) arch=arm ;;
-    esac
-    curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
-      \"https://cdn.ohmyposh.dev/releases/latest/posh-linux-\${arch}\" \
-      -o ${LOCAL_BIN_DIR@Q}/oh-my-posh
-    chmod 0755 ${LOCAL_BIN_DIR@Q}/oh-my-posh
+    eval \"\$(${HOMEBREW_PREFIX@Q}/bin/brew shellenv)\"
+    if ! command -v starship >/dev/null 2>&1; then
+      brew install starship
+    fi
   "
 }
 
@@ -260,9 +253,17 @@ EOF
   "
 }
 
-write_theme() {
-  mkdir -p "${OMP_THEME_DIR}"
-  retry 5 curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused "${OMP_THEME_URL}" -o "${OMP_THEME_PATH}"
+cleanup_legacy_prompt_config() {
+  rm -rf "${LEGACY_OMP_THEME_DIR}"
+  rm -f "${LEGACY_OMP_SNIPPET}" "${LOCAL_BIN_DIR}/oh-my-posh"
+}
+
+write_starship_config() {
+  retry_as_target_shell "
+    export HOME=${TARGET_HOME@Q}
+    mkdir -p \$(dirname ${STARSHIP_CONFIG_PATH@Q})
+    curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused ${STARSHIP_PRESET_URL@Q} -o ${STARSHIP_CONFIG_PATH@Q}
+  "
 }
 
 write_git_config() {
@@ -311,7 +312,10 @@ set -gx XMODIFIERS @im=fcitx
 if test -x ${HOMEBREW_PREFIX}/bin/brew
   eval (${HOMEBREW_PREFIX}/bin/brew shellenv)
 end
-oh-my-posh init fish --config ${OMP_THEME_PATH} | source
+set -gx STARSHIP_CONFIG \$HOME/.config/starship.toml
+if command -q starship
+  starship init fish | source
+end
 EOF
 }
 
@@ -604,8 +608,10 @@ fix_ownership() {
       "${TARGET_HOME}/.local" \
       "${TARGET_HOME}/.cargo" \
       "${TARGET_HOME}/.rustup" \
-      "${TARGET_HOME}/.config/oh-my-posh" \
       "${FISH_CONFIG_DIR}"
+    if [[ -e "${STARSHIP_CONFIG_PATH}" ]]; then
+      as_root chown "${TARGET_USER}:$(id -gn "${TARGET_USER}")" "${STARSHIP_CONFIG_PATH}"
+    fi
   fi
 }
 
@@ -623,13 +629,14 @@ set_default_shell() {
 
 main() {
   install_packages
-  install_oh_my_posh
   install_rust
   install_homebrew
+  install_starship
   install_brew_packages
   install_cargo_packages
   install_zen_browser
-  write_theme
+  cleanup_legacy_prompt_config
+  write_starship_config
   write_git_config
   write_fish_config
   write_fcitx_config
@@ -644,7 +651,7 @@ main() {
   write_sway_config_override
   fix_ownership
   set_default_shell
-  log "configured git, fish, oh-my-posh (${OMP_THEME_NAME}), Rust, Homebrew tools, Cargo tools, Ghostty, Zen Browser, Neovim, Fcitx5 Chinese input, timezone, and time sync for ${TARGET_USER}"
+  log "configured git, fish, Starship (Tokyo Night), Rust, Homebrew tools, Cargo tools, Ghostty, Zen Browser, Neovim, Fcitx5 Chinese input, timezone, and time sync for ${TARGET_USER}"
 }
 
 main "$@"

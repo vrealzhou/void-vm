@@ -38,8 +38,7 @@ type Config struct {
 	SSHPublicKey           string
 	SSHKnownHostsFile      string
 	Timezone               string
-	OMPThemeURL            string
-	OMPThemeName           string
+	StarshipPresetURL      string
 	BootstrapBrewPackages  string
 	BootstrapCargoPackages string
 	GitUserName            string
@@ -117,8 +116,7 @@ func LoadConfig() (Config, error) {
 	cfg.SSHPublicKey = envOr(env, "VM_SSH_PUBLIC_KEY", filepath.Join(homeDir, ".ssh", "id_ed25519.pub"))
 	cfg.SSHKnownHostsFile = envOr(env, "VM_SSH_KNOWN_HOSTS_FILE", "")
 	cfg.Timezone = envOr(env, "VM_TIMEZONE", "Australia/Sydney")
-	cfg.OMPThemeURL = envOr(env, "VM_OMP_THEME_URL", "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/unicorn.omp.json")
-	cfg.OMPThemeName = envOr(env, "VM_OMP_THEME_NAME", "unicorn.omp.json")
+	cfg.StarshipPresetURL = envOr(env, "VM_STARSHIP_PRESET_URL", "https://starship.rs/presets/toml/tokyo-night.toml")
 	cfg.BootstrapBrewPackages = envOr(env, "VM_BOOTSTRAP_BREW_PACKAGES", "")
 	cfg.BootstrapCargoPackages = envOr(env, "VM_BOOTSTRAP_CARGO_PACKAGES", "")
 	cfg.GitUserName = envOr(env, "VM_GIT_USER_NAME", "")
@@ -128,7 +126,7 @@ func LoadConfig() (Config, error) {
 	}
 	cfg.VoidRepository = envOr(env, "VM_VOID_REPOSITORY", "https://repo-default.voidlinux.org")
 
-	cfg.ImageDir = envOr(env, "VM_IMAGE_DIR", filepath.Join(homeDir, "vms", "vfkit-cachy", "images"))
+	cfg.ImageDir = envOr(env, "VM_IMAGE_DIR", filepath.Join(repoRoot, "images"))
 	cfg.BaseImage = envOr(env, "VM_BASE_IMAGE", filepath.Join(cfg.ImageDir, "void-aarch64-ROOTFS-20250202.tar.xz"))
 	cfg.BaseImageURL = envOr(env, "VM_BASE_IMAGE_URL", "https://repo-default.voidlinux.org/live/current/void-aarch64-ROOTFS-20250202.tar.xz")
 	if cfg.GUI, err = boolEnv(env, "VM_GUI", true); err != nil {
@@ -151,7 +149,7 @@ Commands:
   start      Create missing assets and start the VM
   stop       Stop the VM via vfkit REST API
   status     Show VM state and effective network target
-  bootstrap  Configure fish + oh-my-posh + Rust + Homebrew + desktop tools inside the guest over SSH
+  bootstrap  Configure fish + Starship + Rust + Homebrew + desktop tools inside the guest over SSH
   clip-in    Copy the macOS clipboard into the guest Wayland clipboard
   clip-out   Copy the guest Wayland clipboard into the macOS clipboard
   ssh        SSH into the guest using the configured static IP
@@ -172,7 +170,7 @@ Important environment variables:
   VM_SSH_PUBLIC_KEY=%s
   VM_TIMEZONE=%s
   VM_VOID_REPOSITORY=%s
-  VM_OMP_THEME_NAME=unicorn.omp.json
+  VM_STARSHIP_PRESET_URL=https://starship.rs/presets/toml/tokyo-night.toml
   VM_BOOTSTRAP_BREW_PACKAGES="helix zellij zig opencode lazygit gitui"
   VM_BOOTSTRAP_CARGO_PACKAGES="fresh-editor:fresh"
   VM_GIT_USER_NAME="Your Name"

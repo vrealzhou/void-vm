@@ -157,10 +157,9 @@ func Bootstrap(cfg Config) error {
 	defer script.Close()
 
 	remoteCmd := fmt.Sprintf(
-		"TARGET_USER=%s OMP_THEME_URL=%s OMP_THEME_NAME=%s SET_DEFAULT_SHELL=%s BOOTSTRAP_XBPS_REPOSITORY=%s BOOTSTRAP_TIMEZONE=%s BOOTSTRAP_BREW_PACKAGES=%s BOOTSTRAP_CARGO_PACKAGES=%s GIT_USER_NAME=%s GIT_USER_EMAIL=%s bash -s",
+		"TARGET_USER=%s STARSHIP_PRESET_URL=%s SET_DEFAULT_SHELL=%s BOOTSTRAP_XBPS_REPOSITORY=%s BOOTSTRAP_TIMEZONE=%s BOOTSTRAP_BREW_PACKAGES=%s BOOTSTRAP_CARGO_PACKAGES=%s GIT_USER_NAME=%s GIT_USER_EMAIL=%s bash -s",
 		shellQuote(cfg.GuestUser),
-		shellQuote(cfg.OMPThemeURL),
-		shellQuote(cfg.OMPThemeName),
+		shellQuote(cfg.StarshipPresetURL),
 		shellQuote(boolString(cfg.SetDefaultShell)),
 		shellQuote(strings.TrimRight(cfg.VoidRepository, "/")+"/current/aarch64"),
 		shellQuote(cfg.Timezone),
@@ -170,7 +169,7 @@ func Bootstrap(cfg Config) error {
 		shellQuote(cfg.GitUserEmail),
 	)
 
-	logf("configuring fish + oh-my-posh inside %s", cfg.Name)
+	logf("configuring fish + Starship inside %s", cfg.Name)
 	args := sshArgsForUser(cfg, cfg.SSHUser)
 	args = append(args, remoteCmd)
 	cmd := exec.Command("ssh", args...)

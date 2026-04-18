@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"vfkit-cachy/internal/vmctl"
+	"github.com/vrealzhou/void-vm/internal/vmctl"
 )
 
 func main() {

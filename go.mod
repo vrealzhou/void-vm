@@ -1,4 +1,4 @@
-module vfkit-cachy
+module github.com/vrealzhou/void-vm
 
 go 1.26
 

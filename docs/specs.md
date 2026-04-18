@@ -194,7 +194,7 @@ Default behavior:
 ### 6.5 Development Environment
 
 - `fish`
-- `oh-my-posh`
+- `starship`
 - `neovim`
 - `rustup`
 - `Homebrew for Linux`
@@ -215,12 +215,15 @@ Constraints:
 
 ## 7. Shell, Git, And Time
 
-### 7.1 Fish And Oh My Posh
+### 7.1 Fish And Starship
 
 Requirements:
 
 - default shell: `fish`
-- default prompt theme: `unicorn`
+- default prompt theme: `Tokyo Night`
+- Starship config path: `~/.config/starship.toml`
+- Fish init line: `starship init fish | source`
+- default preset source: `https://starship.rs/presets/toml/tokyo-night.toml`
 - true-color shell support enabled
 
 ### 7.2 Git
@@ -278,6 +281,7 @@ Typical override groups:
 - image source: `VM_BASE_IMAGE`, `VM_BASE_IMAGE_URL`
 - display: `VM_WIDTH`, `VM_HEIGHT`
 - bootstrap packages: `VM_BOOTSTRAP_BREW_PACKAGES`, `VM_BOOTSTRAP_CARGO_PACKAGES`
+- prompt preset: `VM_STARSHIP_PRESET_URL`
 - git identity: `VM_GIT_USER_NAME`, `VM_GIT_USER_EMAIL`
 
 ## 10. Acceptance Criteria

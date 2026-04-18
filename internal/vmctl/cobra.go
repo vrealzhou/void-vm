@@ -76,7 +76,7 @@ func newStatusCommand(cfg Config) *cobra.Command {
 func newBootstrapCommand(cfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:   "bootstrap",
-		Short: "Configure fish + oh-my-posh + Rust + Homebrew + desktop tools inside the guest over SSH",
+		Short: "Configure fish + Starship + Rust + Homebrew + desktop tools inside the guest over SSH",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return Bootstrap(cfg)

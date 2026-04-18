@@ -86,6 +86,7 @@ BOOTSTRAP_MARKER="$(cat "${STATE_DIR}/bootstrap.done")"
 
 ssh_vm "fish -lc '
   command -v brew >/tmp/brew-path.txt
+  command -v starship >/tmp/starship-path.txt
   command -v hx >/tmp/hx-path.txt
   command -v zellij >/tmp/zellij-path.txt
   command -v zig >/tmp/zig-path.txt
@@ -93,16 +94,19 @@ ssh_vm "fish -lc '
   command -v cargo >/tmp/cargo-path.txt
   fish --version >/tmp/fish-version.txt
   brew --version >/tmp/brew-version.txt
+  starship --version >/tmp/starship-version.txt
   hx --version >/tmp/hx-version.txt
   zellij --version >/tmp/zellij-version.txt
   zig version >/tmp/zig-version.txt
   rustc --version >/tmp/rustc-version.txt
   cargo --version >/tmp/cargo-version.txt
 ' && \
-test -f ~/.config/oh-my-posh/unicorn.omp.json && \
-grep -q 'unicorn.omp.json' ~/.config/fish/conf.d/oh-my-posh.fish && \
-grep -q '.cargo/bin' ~/.config/fish/conf.d/oh-my-posh.fish && \
-grep -q 'brew shellenv' ~/.config/fish/conf.d/oh-my-posh.fish && \
+test -f ~/.config/starship.toml && \
+test ! -e ~/.config/oh-my-posh && \
+test ! -e ~/.config/fish/conf.d/oh-my-posh.fish && \
+grep -q 'starship init fish' ~/.config/fish/conf.d/starship.fish && \
+grep -q '.cargo/bin' ~/.config/fish/conf.d/starship.fish && \
+grep -q 'brew shellenv' ~/.config/fish/conf.d/starship.fish && \
 getent passwd ${VM_USER} | grep -q '/usr/bin/fish' && \
 sudo sv status NetworkManager sshd dbus seatd chronyd >/tmp/service-status.txt"
 
