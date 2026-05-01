@@ -170,6 +170,7 @@ Commands:
   clip-out   Copy the guest Wayland clipboard into the macOS clipboard
   ssh        SSH into the guest using the configured static IP
   ip         Print the configured guest IP
+  sync       Manage file sync pairs between host and VM
 
 Important environment variables:
   VM_MEMORY_MIB=6144
