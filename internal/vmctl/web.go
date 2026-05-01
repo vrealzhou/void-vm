@@ -2,7 +2,6 @@ package vmctl
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 
 	"github.com/labstack/echo/v5"
