@@ -1,7 +1,9 @@
 package vmctl
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"time"
@@ -115,4 +117,76 @@ func restoreBackup(backupsDir, pairID string, timestamp time.Time, targetDir str
 		}
 		return copyFile(path, dst)
 	})
+}
+
+func retentionDays(pair SyncPair) int {
+	if pair.BackupRetentionDays != 0 {
+		return pair.BackupRetentionDays
+	}
+	return 7
+}
+
+func buildRsyncArgs(cfg Config, pair SyncPair, hostToVM bool) []string {
+	args := []string{
+		"-avz",
+		"--delete",
+		"-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+	}
+
+	for _, pattern := range pair.Exclude {
+		args = append(args, "--exclude", pattern)
+	}
+	if pair.ExcludeFrom != "" {
+		args = append(args, "--exclude-from", pair.ExcludeFrom)
+	}
+
+	if hostToVM {
+		args = append(args, pair.HostPath+"/", cfg.SSHUser+"@"+cfg.StaticIP+":"+pair.VMPath+"/")
+	} else {
+		args = append(args, cfg.SSHUser+"@"+cfg.StaticIP+":"+pair.VMPath+"/", pair.HostPath+"/")
+	}
+
+	return args
+}
+
+func runRsync(args []string) error {
+	cmd := exec.Command("rsync", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// CopySyncHostToVM syncs from host to VM (no backup needed since we're not overwriting host files)
+func CopySyncHostToVM(cfg Config, pair SyncPair, backupsDir string) error {
+	if err := cleanupOldBackups(backupsDir, pair.ID, retentionDays(pair)); err != nil {
+		return fmt.Errorf("cleanup old backups: %w", err)
+	}
+	args := buildRsyncArgs(cfg, pair, true)
+	return runRsync(args)
+}
+
+// CopySyncVMToHost syncs from VM to host (backup host files before overwriting)
+func CopySyncVMToHost(cfg Config, pair SyncPair, backupsDir string) error {
+	if err := cleanupOldBackups(backupsDir, pair.ID, retentionDays(pair)); err != nil {
+		return fmt.Errorf("cleanup old backups: %w", err)
+	}
+
+	timestamp := time.Now().UTC()
+	if err := backupDirectory(pair.HostPath, backupsDir, pair.ID, timestamp); err != nil {
+		return fmt.Errorf("backup host dir: %w", err)
+	}
+
+	args := buildRsyncArgs(cfg, pair, false)
+	return runRsync(args)
+}
+
+// CopySyncBidirectional performs bidirectional sync: VM->Host first (with backup), then Host->VM
+func CopySyncBidirectional(cfg Config, pair SyncPair, backupsDir string) error {
+	if err := CopySyncVMToHost(cfg, pair, backupsDir); err != nil {
+		return fmt.Errorf("vm to host: %w", err)
+	}
+	if err := CopySyncHostToVM(cfg, pair, backupsDir); err != nil {
+		return fmt.Errorf("host to vm: %w", err)
+	}
+	return nil
 }

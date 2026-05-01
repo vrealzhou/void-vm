@@ -234,3 +234,80 @@ func TestListBackupsIgnoresNonTimestampDirs(t *testing.T) {
 		t.Fatalf("backup = %v, want %v", got[0], valid)
 	}
 }
+
+func TestBuildRsyncArgsHostToVM(t *testing.T) {
+	cfg := Config{
+		SSHUser:  "dev",
+		StaticIP: "192.168.64.10",
+	}
+	pair := SyncPair{
+		ID:       "myapp",
+		HostPath: "/Users/dev/myapp",
+		VMPath:   "/home/dev/myapp",
+		Exclude:  []string{"*.tmp", ".DS_Store"},
+	}
+
+	args := buildRsyncArgs(cfg, pair, true)
+
+	want := []string{
+		"-avz", "--delete",
+		"-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+		"--exclude", "*.tmp",
+		"--exclude", ".DS_Store",
+		"/Users/dev/myapp/", "dev@192.168.64.10:/home/dev/myapp/",
+	}
+
+	if len(args) != len(want) {
+		t.Fatalf("len(args) = %d, want %d; args = %v", len(args), len(want), args)
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Fatalf("args[%d] = %q, want %q", i, args[i], want[i])
+		}
+	}
+}
+
+func TestBuildRsyncArgsVMToHost(t *testing.T) {
+	cfg := Config{
+		SSHUser:  "dev",
+		StaticIP: "192.168.64.10",
+	}
+	pair := SyncPair{
+		ID:          "docs",
+		HostPath:    "/Users/dev/docs",
+		VMPath:      "/home/dev/docs",
+		ExcludeFrom: "/tmp/exclude.txt",
+	}
+
+	args := buildRsyncArgs(cfg, pair, false)
+
+	want := []string{
+		"-avz", "--delete",
+		"-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+		"--exclude-from", "/tmp/exclude.txt",
+		"dev@192.168.64.10:/home/dev/docs/", "/Users/dev/docs/",
+	}
+
+	if len(args) != len(want) {
+		t.Fatalf("len(args) = %d, want %d; args = %v", len(args), len(want), args)
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Fatalf("args[%d] = %q, want %q", i, args[i], want[i])
+		}
+	}
+}
+
+func TestRetentionDaysDefault(t *testing.T) {
+	pair := SyncPair{BackupRetentionDays: 0}
+	if got := retentionDays(pair); got != 7 {
+		t.Fatalf("retentionDays(default) = %d, want 7", got)
+	}
+}
+
+func TestRetentionDaysCustom(t *testing.T) {
+	pair := SyncPair{BackupRetentionDays: 14}
+	if got := retentionDays(pair); got != 14 {
+		t.Fatalf("retentionDays(custom) = %d, want 14", got)
+	}
+}
