@@ -5,7 +5,7 @@ Use `vfkit` on Apple Silicon macOS to run a fixed-IP `arm64` Linux development V
 The project is intentionally scoped to one supported workflow:
 
 - Distribution: `Void Linux aarch64 glibc`
-- Desktop: `Sway`
+- Desktop: configurable, default `Sway`
 - Entry point: `go run ./cmd/vmctl <command>`
 - Network model: fixed IP `192.168.64.10`
 - Default user: `dev`
@@ -51,7 +51,15 @@ command -v vfkit qemu-img curl ssh go podman pbcopy pbpaste
 
 ## Install And First Boot
 
-There is no separate installer step for the repo itself. Run:
+There is no separate installer step for the repo itself. The default entry point is the GUI:
+
+```bash
+go run ./cmd/vmctl
+```
+
+From there you can bootstrap, start, stop, and destroy the VM.
+
+To boot directly from the CLI, run:
 
 ```bash
 go run ./cmd/vmctl start
@@ -68,7 +76,7 @@ On the first successful `start`, `vmctl` will:
 
 If startup succeeds:
 
-- the GUI auto-enters the `dev` `sway` session
+- the GUI auto-enters the configured desktop session
 - the host can connect with:
 
 ```bash
@@ -127,9 +135,11 @@ Default login:
 ```bash
 go run ./cmd/vmctl start
 go run ./cmd/vmctl stop
+go run ./cmd/vmctl destroy
 go run ./cmd/vmctl status
 go run ./cmd/vmctl ssh
 go run ./cmd/vmctl ip
+go run ./cmd/vmctl gui
 go run ./cmd/vmctl bootstrap
 go run ./cmd/vmctl clip-in
 go run ./cmd/vmctl clip-out
@@ -139,19 +149,30 @@ Meaning:
 
 - `start`: create any missing assets and boot the VM
 - `stop`: stop the VM
+- `destroy`: stop the VM and remove generated state and disk files, but keep the base image
 - `status`: print current state, PID, disk path, and IP
 - `ssh`: log into the guest using the configured default user
 - `ip`: print only the guest IP
-- `bootstrap`: rerun guest-side software and config initialization
+- `gui`: open the Fyne control panel
+- `bootstrap`: open the guided bootstrap flow, apply the chosen preferences, and write `bootstrap.done`
 - `clip-in`: copy macOS clipboard into the guest Wayland clipboard
 - `clip-out`: copy the guest Wayland clipboard back into macOS
+
+The GUI control panel can:
+
+- guide the user to bootstrap first through a popup that asks for shell, editor, and window manager
+- keep `start` and `stop` disabled until bootstrap has completed
+- start, stop, and destroy the VM after bootstrap
+- show whether the VM is running
+- sample guest CPU and memory usage over SSH
 
 ## Guest Bootstrap Contents
 
 Bootstrap configures:
 
-- `fish`
+- `fish` or `zsh`
 - `starship` with the Tokyo Night preset
+- `fnm` for Node.js
 - `Rust` and `cargo`
 - `Homebrew for Linux`
 - `Neovim`
@@ -162,7 +183,7 @@ Bootstrap configures:
 - `Zen Browser`
 - `Fcitx5` Chinese input
 - `~/.gitconfig`
-- `tty1 autologin -> dev -> sway`
+- `tty1 autologin -> dev -> configured desktop session`
 
 Default desktop behavior:
 
@@ -182,6 +203,14 @@ Browser notes:
 
 Put overrides in a repo-root `.vmctl.env`. Any value you omit keeps the code default.
 Use absolute paths in `.vmctl.env` when you override file locations. The loader does not expand `~` or `$HOME`.
+
+You can also open the GUI directly:
+
+```bash
+go run ./cmd/vmctl gui
+```
+
+Running `go run ./cmd/vmctl` without a subcommand opens the same control panel. Preferences are chosen from the `Bootstrap` popup, not from the main screen.
 
 You can start from the template:
 
@@ -248,6 +277,9 @@ VM_BASE_IMAGE=/absolute/path/to/custom.img
 
 ```bash
 VM_TIMEZONE=Australia/Sydney
+VM_DEFAULT_SHELL=fish
+VM_DEFAULT_EDITOR=neovim
+VM_WINDOW_MANAGER=sway
 VM_STARSHIP_PRESET_URL=https://starship.rs/presets/toml/tokyo-night.toml
 VM_GUI=1
 VM_WIDTH=1920
@@ -255,6 +287,7 @@ VM_HEIGHT=1200
 ```
 
 Bootstrap writes the prompt config to `~/.config/starship.toml` and enables it from Fish with `starship init fish | source`. The Tokyo Night preset uses Nerd Font symbols, so make sure your terminal font supports them.
+Bootstrap installs `fnm` through Homebrew, enables it in the configured shell, installs the latest LTS Node.js release, and uses that instead of a Homebrew-managed `node`.
 
 For 4K:
 
