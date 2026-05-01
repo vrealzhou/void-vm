@@ -119,3 +119,63 @@ func IsTunnelRunning(cfg Config, tunnel Tunnel) bool {
 func tunnelPIDFile(cfg Config, tunnelID string) string {
 	return filepath.Join(cfg.StateDir, "tunnels", tunnelID+".pid")
 }
+
+// StopAllTunnels stops all active tunnels.
+// It loads the tunnel config and stops each tunnel that is currently running.
+// Errors are collected and a summary error is returned if any failed.
+func StopAllTunnels(cfg Config) error {
+	tc, err := LoadTunnelConfig(tunnelConfigPath(cfg))
+	if err != nil {
+		return fmt.Errorf("load tunnel config: %w", err)
+	}
+
+	var errs []error
+	for _, tunnel := range tc.Tunnels {
+		if !IsTunnelRunning(cfg, tunnel) {
+			continue
+		}
+		if err := StopTunnel(cfg, tunnel); err != nil {
+			errs = append(errs, fmt.Errorf("stop tunnel %q: %w", tunnel.ID, err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to stop %d tunnel(s): %v", len(errs), errs)
+	}
+	return nil
+}
+
+// StartAutoTunnels starts all tunnels marked with auto_start and enabled.
+func StartAutoTunnels(cfg Config) error {
+	tc, err := LoadTunnelConfig(tunnelConfigPath(cfg))
+	if err != nil {
+		return fmt.Errorf("load tunnel config: %w", err)
+	}
+
+	var started int
+	var errs []error
+	for _, tunnel := range tc.Tunnels {
+		if !tunnel.AutoStart || !tunnel.Enabled {
+			continue
+		}
+		if IsTunnelRunning(cfg, tunnel) {
+			logf("tunnel %q already running", tunnel.ID)
+			continue
+		}
+		if err := StartTunnel(cfg, tunnel); err != nil {
+			logf("failed to start tunnel %q: %v", tunnel.ID, err)
+			errs = append(errs, fmt.Errorf("start tunnel %q: %w", tunnel.ID, err))
+			continue
+		}
+		logf("started tunnel %q", tunnel.ID)
+		started++
+	}
+
+	if started > 0 {
+		logf("auto-started %d tunnel(s)", started)
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to start %d tunnel(s): %v", len(errs), errs)
+	}
+	return nil
+}

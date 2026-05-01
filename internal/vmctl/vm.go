@@ -71,6 +71,9 @@ func Start(cfg Config) error {
 			return err
 		}
 	}
+	if err := StartAutoTunnels(cfg); err != nil {
+		logf("auto-start tunnels: %v", err)
+	}
 	return Status(cfg)
 }
 
@@ -104,6 +107,9 @@ func Stop(cfg Config) error {
 			_ = os.Remove(cfg.PIDFile)
 			_ = os.Remove(cfg.RestSocket)
 			logf("VM stopped")
+			if err := StopAllTunnels(cfg); err != nil {
+				logf("stop tunnels: %v", err)
+			}
 			return nil
 		}
 		time.Sleep(time.Second)

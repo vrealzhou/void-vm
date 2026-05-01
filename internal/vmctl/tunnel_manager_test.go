@@ -244,3 +244,87 @@ func TestIsTunnelRunningWithDeadProcess(t *testing.T) {
 		t.Fatal("expected false for non-existent process")
 	}
 }
+
+func TestStopAllTunnelsNoConfig(t *testing.T) {
+	cfg := Config{
+		RepoRoot: t.TempDir(),
+	}
+	// No tunnel config file exists — should return nil (nothing to stop).
+	if err := StopAllTunnels(cfg); err != nil {
+		t.Fatalf("expected nil error when no config, got %v", err)
+	}
+}
+
+func TestStopAllTunnelsWithDeadTunnel(t *testing.T) {
+	cfg := Config{
+		RepoRoot: t.TempDir(),
+		StateDir: t.TempDir(),
+	}
+
+	// Create a tunnel config with one tunnel whose PID file references a dead process.
+	tc := TunnelConfig{
+		Version: 1,
+		Tunnels: []Tunnel{
+			{ID: "dead", Name: "Dead Tunnel", Enabled: true},
+		},
+	}
+	path := tunnelConfigPath(cfg)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveTunnelConfig(path, tc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a non-existent PID.
+	pidFile := tunnelPIDFile(cfg, "dead")
+	if err := os.MkdirAll(filepath.Dir(pidFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pidFile, []byte("999999"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should succeed because the tunnel is not actually running.
+	if err := StopAllTunnels(cfg); err != nil {
+		t.Fatalf("expected nil error for dead tunnel, got %v", err)
+	}
+}
+
+func TestStartAutoTunnelsNoConfig(t *testing.T) {
+	cfg := Config{
+		RepoRoot: t.TempDir(),
+	}
+	if err := StartAutoTunnels(cfg); err != nil {
+		t.Fatalf("expected nil error when no config, got %v", err)
+	}
+}
+
+func TestStartAutoTunnelsSkipsNonAutoStart(t *testing.T) {
+	cfg := Config{
+		RepoRoot: t.TempDir(),
+		StateDir: t.TempDir(),
+		StaticIP: "192.168.64.10",
+		SSHUser:  "dev",
+	}
+
+	tc := TunnelConfig{
+		Version: 1,
+		Tunnels: []Tunnel{
+			{ID: "manual", Name: "Manual Tunnel", Enabled: true, AutoStart: false},
+			{ID: "disabled", Name: "Disabled Tunnel", Enabled: false, AutoStart: true},
+		},
+	}
+	path := tunnelConfigPath(cfg)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveTunnelConfig(path, tc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should succeed without starting anything.
+	if err := StartAutoTunnels(cfg); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+}
