@@ -113,31 +113,19 @@ func Stop(cfg Config) error {
 }
 
 func Status(cfg Config) error {
-	running, err := pidIsRunning(cfg.PIDFile)
+	status, err := InspectVM(cfg)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("name: %s\n", cfg.Name)
-	if !running {
-		fmt.Println("state: stopped")
-		fmt.Printf("disk: %s\n", cfg.DiskPath)
-		fmt.Printf("ip: %s\n", cfg.StaticIP)
-		return nil
+	fmt.Printf("name: %s\n", status.Name)
+	fmt.Printf("state: %s\n", status.State)
+	fmt.Printf("disk: %s\n", status.DiskPath)
+	fmt.Printf("ip: %s\n", status.StaticIP)
+	fmt.Printf("bootstrap: %t\n", status.BootstrapDone)
+	if status.Running {
+		fmt.Printf("pid: %d\n", status.PID)
+		fmt.Printf("ssh: ssh %s\n", status.SSHTarget)
 	}
-
-	pid, err := readPID(cfg.PIDFile)
-	if err != nil {
-		return err
-	}
-	state := "unknown"
-	if resp, err := currentState(cfg); err == nil && resp.State != "" {
-		state = resp.State
-	}
-	fmt.Printf("state: %s\n", state)
-	fmt.Printf("pid: %d\n", pid)
-	fmt.Printf("disk: %s\n", cfg.DiskPath)
-	fmt.Printf("ip: %s\n", cfg.StaticIP)
-	fmt.Printf("ssh: ssh %s@%s\n", cfg.SSHUser, cfg.StaticIP)
 	return nil
 }
 
@@ -157,8 +145,11 @@ func Bootstrap(cfg Config) error {
 	defer script.Close()
 
 	remoteCmd := fmt.Sprintf(
-		"TARGET_USER=%s STARSHIP_PRESET_URL=%s SET_DEFAULT_SHELL=%s BOOTSTRAP_XBPS_REPOSITORY=%s BOOTSTRAP_TIMEZONE=%s BOOTSTRAP_BREW_PACKAGES=%s BOOTSTRAP_CARGO_PACKAGES=%s GIT_USER_NAME=%s GIT_USER_EMAIL=%s bash -s",
+		"TARGET_USER=%s DEFAULT_SHELL=%s DEFAULT_EDITOR=%s WINDOW_MANAGER=%s STARSHIP_PRESET_URL=%s SET_DEFAULT_SHELL=%s BOOTSTRAP_XBPS_REPOSITORY=%s BOOTSTRAP_TIMEZONE=%s BOOTSTRAP_BREW_PACKAGES=%s BOOTSTRAP_CARGO_PACKAGES=%s GIT_USER_NAME=%s GIT_USER_EMAIL=%s bash -s",
 		shellQuote(cfg.GuestUser),
+		shellQuote(cfg.DefaultShell),
+		shellQuote(cfg.DefaultEditor),
+		shellQuote(cfg.WindowManager),
 		shellQuote(cfg.StarshipPresetURL),
 		shellQuote(boolString(cfg.SetDefaultShell)),
 		shellQuote(strings.TrimRight(cfg.VoidRepository, "/")+"/current/aarch64"),
@@ -169,7 +160,7 @@ func Bootstrap(cfg Config) error {
 		shellQuote(cfg.GitUserEmail),
 	)
 
-	logf("configuring fish + Starship inside %s", cfg.Name)
+	logf("configuring %s + %s + %s inside %s", cfg.DefaultShell, cfg.DefaultEditor, cfg.WindowManager, cfg.Name)
 	args := sshArgsForUser(cfg, cfg.SSHUser)
 	args = append(args, remoteCmd)
 	cmd := exec.Command("ssh", args...)
@@ -177,6 +168,30 @@ func Bootstrap(cfg Config) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func BootstrapSetup(cfg Config) error {
+	status, err := InspectVM(cfg)
+	if err != nil {
+		return err
+	}
+
+	if !status.Running {
+		if err := Start(cfg); err != nil {
+			return err
+		}
+		if fileExists(cfg.BootstrapMarker) {
+			return nil
+		}
+	}
+
+	if err := waitForSSH(cfg, cfg.SSHUser, 5*time.Minute); err != nil {
+		return err
+	}
+	if err := Bootstrap(cfg); err != nil {
+		return err
+	}
+	return writeBootstrapMarker(cfg)
 }
 
 func prepareDisk(cfg Config) (Config, error) {
@@ -355,6 +370,9 @@ func buildVoidLinuxDisk(cfg Config) error {
 		"-e", "TIMEZONE="+cfg.Timezone,
 		"-e", "VOID_REPOSITORY="+cfg.VoidRepository,
 		"-e", "VM_NAME="+cfg.Name,
+		"-e", "DEFAULT_SHELL="+cfg.DefaultShell,
+		"-e", "DEFAULT_EDITOR="+cfg.DefaultEditor,
+		"-e", "WINDOW_MANAGER="+cfg.WindowManager,
 		"-v", cfg.RepoRoot+":/repo:ro",
 		"-v", cfg.StateDir+":/work",
 		"-v", cfg.BaseImage+":/input/base.tar.xz:ro",
@@ -422,8 +440,8 @@ repository=${repo}
 EOF
 
 retry_chroot_xbps "xbps-install -R ${repo} -Sy xbps && xbps-install -R ${repo} -uy xbps"
-retry_chroot_xbps "DRACUT_NO_XATTR=1 xbps-install -R ${repo} -Suy linux6.12 dracut openssh NetworkManager dbus fish-shell curl wget git unzip bash file sudo chrony neovim"
-retry_chroot_xbps "xbps-install -R ${repo} -Suy seatd sway foot ghostty ghostty-terminfo mesa mesa-dri wl-clipboard wofi mako grim slurp xdg-desktop-portal-wlr fcitx5 fcitx5-chinese-addons fcitx5-configtool fcitx5-gtk+2 fcitx5-gtk+3 fcitx5-gtk4 fcitx5-qt5 fcitx5-qt6 noto-fonts-cjk noto-fonts-emoji"
+retry_chroot_xbps "DRACUT_NO_XATTR=1 xbps-install -R ${repo} -Suy linux6.12 dracut openssh NetworkManager dbus fish-shell zsh curl wget git unzip bash file sudo chrony neovim"
+retry_chroot_xbps "xbps-install -R ${repo} -Suy seatd sway foot ghostty ghostty-terminfo mesa mesa-dri wl-clipboard wofi mako grim slurp xdg-desktop-portal-wlr xorg xfce4 xfce4-terminal fcitx5 fcitx5-chinese-addons fcitx5-configtool fcitx5-gtk+2 fcitx5-gtk+3 fcitx5-gtk4 fcitx5-qt5 fcitx5-qt6 noto-fonts-cjk noto-fonts-emoji"
 retry_chroot_xbps "xbps-install -R ${repo} -Suy chromium"
 
 printf '%s\n' "${VM_NAME}" >/tmp/void-rootfs/etc/hostname
@@ -435,10 +453,17 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 SSH
 
+guest_shell="/bin/bash"
+case "${DEFAULT_SHELL}" in
+  fish) guest_shell="/usr/bin/fish" ;;
+  zsh) guest_shell="/usr/bin/zsh" ;;
+esac
+
 if ! chroot /tmp/void-rootfs /usr/bin/id -u "${GUEST_USER}" >/dev/null 2>&1; then
-  chroot /tmp/void-rootfs /usr/sbin/useradd -m -G wheel,audio,video,input,_seatd -s /bin/bash "${GUEST_USER}"
+  chroot /tmp/void-rootfs /usr/sbin/useradd -m -G wheel,audio,video,input,_seatd -s "${guest_shell}" "${GUEST_USER}"
 else
   chroot /tmp/void-rootfs /usr/sbin/usermod -aG wheel,audio,video,input,_seatd "${GUEST_USER}"
+  chroot /tmp/void-rootfs /usr/sbin/usermod -s "${guest_shell}" "${GUEST_USER}"
 fi
 
 if ! chroot /tmp/void-rootfs /usr/bin/getent group chrony >/dev/null 2>&1; then
@@ -509,12 +534,8 @@ fi
 } >/tmp/void-rootfs/etc/resolv.conf
 
 mkdir -p /tmp/void-rootfs/usr/local/bin
-cat >/tmp/void-rootfs/usr/local/bin/vmctl-sway-session <<'EOF'
+cat >/tmp/void-rootfs/usr/local/bin/vmctl-session <<EOF
 #!/bin/sh
-export XDG_CURRENT_DESKTOP=sway
-export XDG_SESSION_TYPE=wayland
-export WLR_RENDERER=pixman
-export WLR_NO_HARDWARE_CURSORS=1
 export GTK_IM_MODULE=fcitx
 export QT_IM_MODULE=fcitx
 export SDL_IM_MODULE=fcitx
@@ -522,8 +543,37 @@ export XMODIFIERS=@im=fcitx
 export XDG_RUNTIME_DIR="${HOME}/.local/run"
 mkdir -p "${XDG_RUNTIME_DIR}"
 chmod 700 "${XDG_RUNTIME_DIR}"
-if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
-  exec dbus-run-session sh -lc '
+case "${WINDOW_MANAGER}" in
+  xfce)
+    export XDG_CURRENT_DESKTOP=XFCE
+    export XDG_SESSION_DESKTOP=xfce
+    export XDG_SESSION_TYPE=x11
+    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+      exec dbus-run-session startxfce4
+    fi
+    exec startxfce4
+    ;;
+  *)
+    export XDG_CURRENT_DESKTOP=sway
+    export XDG_SESSION_TYPE=wayland
+    export WLR_RENDERER=pixman
+    export WLR_NO_HARDWARE_CURSORS=1
+    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+      exec dbus-run-session sh -lc '
+        sway &
+        sway_pid=$!
+        for _ in $(seq 1 100); do
+          sock=$(find "${XDG_RUNTIME_DIR}" -maxdepth 1 -type s -name "wayland-*" | head -n 1)
+          if [ -n "${sock}" ]; then
+            export WAYLAND_DISPLAY=$(basename "${sock}")
+            break
+          fi
+          sleep 0.1
+        done
+        fcitx5 -d -r >/tmp/fcitx5.log 2>&1 || true
+        wait "${sway_pid}"
+      '
+    fi
     sway &
     sway_pid=$!
     for _ in $(seq 1 100); do
@@ -536,22 +586,10 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
     done
     fcitx5 -d -r >/tmp/fcitx5.log 2>&1 || true
     wait "${sway_pid}"
-  '
-fi
-sway &
-sway_pid=$!
-for _ in $(seq 1 100); do
-  sock=$(find "${XDG_RUNTIME_DIR}" -maxdepth 1 -type s -name "wayland-*" | head -n 1)
-  if [ -n "${sock}" ]; then
-    export WAYLAND_DISPLAY=$(basename "${sock}")
-    break
-  fi
-  sleep 0.1
-done
-fcitx5 -d -r >/tmp/fcitx5.log 2>&1 || true
-wait "${sway_pid}"
+    ;;
+esac
 EOF
-chmod 0755 /tmp/void-rootfs/usr/local/bin/vmctl-sway-session
+chmod 0755 /tmp/void-rootfs/usr/local/bin/vmctl-session
 
 cat >/tmp/void-rootfs/usr/local/bin/vmctl-chromium <<'EOF'
 #!/bin/sh
@@ -583,10 +621,31 @@ export XDG_RUNTIME_DIR="${HOME}/.local/run"
 mkdir -p "${XDG_RUNTIME_DIR}"
 chmod 700 "${XDG_RUNTIME_DIR}"
 if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ] && [ "$(tty 2>/dev/null)" = "/dev/tty1" ]; then
-  exec /usr/local/bin/vmctl-sway-session
+  exec /usr/local/bin/vmctl-session
 fi
 EOF
 chroot /tmp/void-rootfs /usr/bin/chown "${GUEST_USER}:${GUEST_USER}" /home/"${GUEST_USER}"/.bash_profile
+
+mkdir -p /tmp/void-rootfs/home/"${GUEST_USER}"/.config/fish/conf.d
+cat >/tmp/void-rootfs/home/"${GUEST_USER}"/.config/fish/conf.d/vmctl-session.fish <<'EOF'
+if status is-interactive
+  if test -z "$WAYLAND_DISPLAY"; and test -z "$DISPLAY"
+    set current_tty (tty 2>/dev/null)
+    if test "$current_tty" = "/dev/tty1"
+      exec /usr/local/bin/vmctl-session
+    end
+  end
+end
+EOF
+cat >/tmp/void-rootfs/home/"${GUEST_USER}"/.zprofile <<'EOF'
+export XDG_RUNTIME_DIR="${HOME}/.local/run"
+mkdir -p "${XDG_RUNTIME_DIR}"
+chmod 700 "${XDG_RUNTIME_DIR}"
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ] && [ "$(tty 2>/dev/null)" = "/dev/tty1" ]; then
+  exec /usr/local/bin/vmctl-session
+fi
+EOF
+chroot /tmp/void-rootfs /usr/bin/chown -R "${GUEST_USER}:${GUEST_USER}" /home/"${GUEST_USER}"/.config/fish /home/"${GUEST_USER}"/.zprofile
 
 mkdir -p /tmp/void-rootfs/home/"${GUEST_USER}"/.config/fcitx5
 mkdir -p /tmp/void-rootfs/home/"${GUEST_USER}"/.config/fcitx5/conf

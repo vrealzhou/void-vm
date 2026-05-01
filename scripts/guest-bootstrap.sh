@@ -4,6 +4,9 @@ set -euo pipefail
 
 TARGET_USER="${TARGET_USER:-$(id -un)}"
 TARGET_HOME="${TARGET_HOME:-$(eval echo "~${TARGET_USER}")}"
+DEFAULT_SHELL="${DEFAULT_SHELL:-fish}"
+DEFAULT_EDITOR="${DEFAULT_EDITOR:-neovim}"
+WINDOW_MANAGER="${WINDOW_MANAGER:-sway}"
 STARSHIP_PRESET_URL="${STARSHIP_PRESET_URL:-https://starship.rs/presets/toml/tokyo-night.toml}"
 SET_DEFAULT_SHELL="${SET_DEFAULT_SHELL:-1}"
 HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/home/linuxbrew/.linuxbrew}"
@@ -18,10 +21,13 @@ GIT_USER_EMAIL="${GIT_USER_EMAIL:-}"
 
 STARSHIP_CONFIG_PATH="${TARGET_HOME}/.config/starship.toml"
 FISH_CONFIG_DIR="${TARGET_HOME}/.config/fish"
-FISH_CONFIG_SNIPPET="${FISH_CONFIG_DIR}/conf.d/starship.fish"
-FISH_SWAY_AUTOSTART_SNIPPET="${FISH_CONFIG_DIR}/conf.d/vmctl-sway-autostart.fish"
+FISH_CONFIG_SNIPPET="${FISH_CONFIG_DIR}/conf.d/vmctl-shell.fish"
+FISH_SESSION_AUTOSTART_SNIPPET="${FISH_CONFIG_DIR}/conf.d/vmctl-session-autostart.fish"
 LEGACY_OMP_THEME_DIR="${TARGET_HOME}/.config/oh-my-posh"
 LEGACY_OMP_SNIPPET="${FISH_CONFIG_DIR}/conf.d/oh-my-posh.fish"
+ZSHRC_PATH="${TARGET_HOME}/.zshrc"
+ZPROFILE_PATH="${TARGET_HOME}/.zprofile"
+BASH_PROFILE_PATH="${TARGET_HOME}/.bash_profile"
 RUSTUP_HOME="${TARGET_HOME}/.rustup"
 CARGO_HOME="${TARGET_HOME}/.cargo"
 LOCAL_BIN_DIR="${TARGET_HOME}/.local/bin"
@@ -118,9 +124,32 @@ cargo_packages() {
   default_cargo_packages
 }
 
+editor_command() {
+  case "${DEFAULT_EDITOR}" in
+    neovim) printf 'nvim\n' ;;
+    helix) printf 'hx\n' ;;
+    *) die "unsupported DEFAULT_EDITOR: ${DEFAULT_EDITOR}" ;;
+  esac
+}
+
+validate_choices() {
+  case "${DEFAULT_SHELL}" in
+    fish|zsh) ;;
+    *) die "unsupported DEFAULT_SHELL: ${DEFAULT_SHELL}" ;;
+  esac
+  case "${DEFAULT_EDITOR}" in
+    neovim|helix) ;;
+    *) die "unsupported DEFAULT_EDITOR: ${DEFAULT_EDITOR}" ;;
+  esac
+  case "${WINDOW_MANAGER}" in
+    sway|xfce) ;;
+    *) die "unsupported WINDOW_MANAGER: ${WINDOW_MANAGER}" ;;
+  esac
+}
+
 install_packages() {
   if command -v xbps-install >/dev/null 2>&1; then
-    local xbps_args=(-Sy fish-shell curl unzip ca-certificates xz bash git wget file sudo chrony neovim ghostty ghostty-terminfo mesa mesa-dri fcitx5 fcitx5-chinese-addons fcitx5-configtool fcitx5-gtk+2 fcitx5-gtk+3 fcitx5-gtk4 fcitx5-qt5 fcitx5-qt6 noto-fonts-cjk noto-fonts-emoji)
+    local xbps_args=(-Sy fish-shell zsh curl unzip ca-certificates xz bash git wget file sudo chrony neovim ghostty ghostty-terminfo mesa mesa-dri xorg xfce4 xfce4-terminal fcitx5 fcitx5-chinese-addons fcitx5-configtool fcitx5-gtk+2 fcitx5-gtk+3 fcitx5-gtk4 fcitx5-qt5 fcitx5-qt6 noto-fonts-cjk noto-fonts-emoji)
     if [[ -n "${BOOTSTRAP_XBPS_REPOSITORY}" ]]; then
       xbps_args=(-R "${BOOTSTRAP_XBPS_REPOSITORY}" "${xbps_args[@]}")
     fi
@@ -129,10 +158,10 @@ install_packages() {
       retry 5 as_root env XBPS_ALLOW_RESTRICTED=yes xbps-install "${xbps_args[@]}"
     fi
   elif command -v pacman >/dev/null 2>&1; then
-    as_root pacman -Sy --needed --noconfirm fish curl unzip git wget bash file sudo
+    as_root pacman -Sy --needed --noconfirm fish zsh curl unzip git wget bash file sudo xfce4 xfce4-terminal
   elif command -v apt-get >/dev/null 2>&1; then
     as_root apt-get update
-    as_root apt-get install -y fish curl unzip ca-certificates xz-utils git wget bash file sudo
+    as_root apt-get install -y fish zsh curl unzip ca-certificates xz-utils git wget bash file sudo xfce4 xfce4-terminal xorg
   else
     die "unsupported package manager"
   fi
@@ -152,6 +181,35 @@ install_starship() {
     eval \"\$(${HOMEBREW_PREFIX@Q}/bin/brew shellenv)\"
     if ! command -v starship >/dev/null 2>&1; then
       brew install starship
+    fi
+  "
+}
+
+install_fnm_and_node() {
+  retry_as_target_shell "
+    export HOME=${TARGET_HOME@Q}
+    eval \"\$(${HOMEBREW_PREFIX@Q}/bin/brew shellenv)\"
+    if ! command -v fnm >/dev/null 2>&1; then
+      brew install fnm
+    fi
+    if brew list --versions node >/dev/null 2>&1; then
+      brew uninstall --ignore-dependencies node || true
+    fi
+    latest_lts=\$(fnm list-remote --lts --latest | sed -E 's/^[*[:space:]]+//' | awk 'NF {print \$1}' | tail -n 1)
+    [ -n \"\${latest_lts}\" ] || { echo \"[guest-bootstrap] ERROR: unable to resolve latest LTS Node.js\" >&2; exit 1; }
+    fnm install --corepack-enabled \"\${latest_lts}\"
+    fnm default \"\${latest_lts}\"
+  "
+}
+
+ensure_default_editor_installed() {
+  [[ "${DEFAULT_EDITOR}" == "helix" ]] || return 0
+
+  retry_as_target_shell "
+    export HOME=${TARGET_HOME@Q}
+    eval \"\$(${HOMEBREW_PREFIX@Q}/bin/brew shellenv)\"
+    if ! command -v hx >/dev/null 2>&1; then
+      brew install helix
     fi
   "
 }
@@ -267,9 +325,11 @@ write_starship_config() {
 }
 
 write_git_config() {
+  local editor
+  editor="$(editor_command)"
   cat >"${TARGET_HOME}/.gitconfig" <<EOF
 [core]
-	editor = nvim
+	editor = ${editor}
 [init]
 	defaultBranch = main
 [pull]
@@ -297,6 +357,8 @@ EOF
 
 write_fish_config() {
   mkdir -p "${FISH_CONFIG_DIR}/conf.d"
+  local editor
+  editor="$(editor_command)"
   cat >"${FISH_CONFIG_SNIPPET}" <<EOF
 set -gx COLORTERM truecolor
 set -g fish_term24bit 1
@@ -305,12 +367,17 @@ mkdir -p \$XDG_RUNTIME_DIR
 chmod 700 \$XDG_RUNTIME_DIR
 set -gx PATH \$HOME/.local/bin \$PATH
 set -gx PATH \$HOME/.cargo/bin \$PATH
+set -gx EDITOR ${editor}
+set -gx VISUAL ${editor}
 set -gx GTK_IM_MODULE fcitx
 set -gx QT_IM_MODULE fcitx
 set -gx SDL_IM_MODULE fcitx
 set -gx XMODIFIERS @im=fcitx
 if test -x ${HOMEBREW_PREFIX}/bin/brew
   eval (${HOMEBREW_PREFIX}/bin/brew shellenv)
+end
+if command -q fnm
+  fnm env --use-on-cd --shell fish | source
 end
 set -gx STARSHIP_CONFIG \$HOME/.config/starship.toml
 if command -q starship
@@ -319,17 +386,67 @@ end
 EOF
 }
 
-write_sway_autostart() {
+write_fish_autostart() {
   mkdir -p "${FISH_CONFIG_DIR}/conf.d"
-  cat >"${FISH_SWAY_AUTOSTART_SNIPPET}" <<'EOF'
+  cat >"${FISH_SESSION_AUTOSTART_SNIPPET}" <<'EOF'
 if status is-interactive
   if test -z "$WAYLAND_DISPLAY"; and test -z "$DISPLAY"
     set current_tty (tty 2>/dev/null)
     if test "$current_tty" = "/dev/tty1"
-      exec /usr/local/bin/vmctl-sway-session
+      exec /usr/local/bin/vmctl-session
     end
   end
 end
+EOF
+}
+
+write_zsh_config() {
+  local editor
+  editor="$(editor_command)"
+  cat >"${ZSHRC_PATH}" <<EOF
+export COLORTERM=truecolor
+export XDG_RUNTIME_DIR="\${HOME}/.local/run"
+mkdir -p "\${XDG_RUNTIME_DIR}"
+chmod 700 "\${XDG_RUNTIME_DIR}"
+export PATH="\${HOME}/.local/bin:\${HOME}/.cargo/bin:\${PATH}"
+export EDITOR=${editor}
+export VISUAL=${editor}
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export SDL_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
+if [ -x ${HOMEBREW_PREFIX}/bin/brew ]; then
+  eval "\$(${HOMEBREW_PREFIX}/bin/brew shellenv)"
+fi
+if command -v fnm >/dev/null 2>&1; then
+  eval "\$(fnm env --use-on-cd --shell zsh)"
+fi
+export STARSHIP_CONFIG="\${HOME}/.config/starship.toml"
+if command -v starship >/dev/null 2>&1; then
+  eval "\$(starship init zsh)"
+fi
+EOF
+}
+
+write_zsh_autostart() {
+  cat >"${ZPROFILE_PATH}" <<'EOF'
+export XDG_RUNTIME_DIR="${HOME}/.local/run"
+mkdir -p "${XDG_RUNTIME_DIR}"
+chmod 700 "${XDG_RUNTIME_DIR}"
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ] && [ "$(tty 2>/dev/null)" = "/dev/tty1" ]; then
+  exec /usr/local/bin/vmctl-session
+fi
+EOF
+}
+
+write_bash_profile() {
+  cat >"${BASH_PROFILE_PATH}" <<'EOF'
+export XDG_RUNTIME_DIR="${HOME}/.local/run"
+mkdir -p "${XDG_RUNTIME_DIR}"
+chmod 700 "${XDG_RUNTIME_DIR}"
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ] && [ "$(tty 2>/dev/null)" = "/dev/tty1" ]; then
+  exec /usr/local/bin/vmctl-session
+fi
 EOF
 }
 
@@ -428,9 +545,28 @@ install_zen_browser() {
   "
 }
 
-write_sway_session_wrapper() {
+write_session_wrapper() {
   as_root mkdir -p /usr/local/bin
-  as_root tee /usr/local/bin/vmctl-sway-session >/dev/null <<'EOF'
+  if [[ "${WINDOW_MANAGER}" == "xfce" ]]; then
+    as_root tee /usr/local/bin/vmctl-session >/dev/null <<'EOF'
+#!/bin/sh
+export XDG_CURRENT_DESKTOP=XFCE
+export XDG_SESSION_DESKTOP=xfce
+export XDG_SESSION_TYPE=x11
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export SDL_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
+export XDG_RUNTIME_DIR="${HOME}/.local/run"
+mkdir -p "${XDG_RUNTIME_DIR}"
+chmod 700 "${XDG_RUNTIME_DIR}"
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+  exec dbus-run-session startxfce4
+fi
+exec startxfce4
+EOF
+  else
+    as_root tee /usr/local/bin/vmctl-session >/dev/null <<'EOF'
 #!/bin/sh
 export XDG_CURRENT_DESKTOP=sway
 export XDG_SESSION_TYPE=wayland
@@ -472,7 +608,8 @@ done
 fcitx5 -d -r >/tmp/fcitx5.log 2>&1 || true
 wait "${sway_pid}"
 EOF
-  as_root chmod 0755 /usr/local/bin/vmctl-sway-session
+  fi
+  as_root chmod 0755 /usr/local/bin/vmctl-session
 }
 
 write_chromium_wrapper() {
@@ -578,7 +715,10 @@ configure_time_sync() {
   fi
 }
 
-write_sway_config_override() {
+write_window_manager_config() {
+  if [[ "${WINDOW_MANAGER}" != "sway" ]]; then
+    return 0
+  fi
   as_root mkdir -p /etc/sway/config.d
 as_root tee /etc/sway/config.d/10-vmctl.conf >/dev/null <<'EOF'
 set $term ghostty
@@ -612,46 +752,60 @@ fix_ownership() {
     if [[ -e "${STARSHIP_CONFIG_PATH}" ]]; then
       as_root chown "${TARGET_USER}:$(id -gn "${TARGET_USER}")" "${STARSHIP_CONFIG_PATH}"
     fi
+    for path in "${TARGET_HOME}/.gitconfig" "${ZSHRC_PATH}" "${ZPROFILE_PATH}" "${BASH_PROFILE_PATH}"; do
+      if [[ -e "${path}" ]]; then
+        as_root chown "${TARGET_USER}:$(id -gn "${TARGET_USER}")" "${path}"
+      fi
+    done
   fi
 }
 
 set_default_shell() {
   [[ "${SET_DEFAULT_SHELL}" == "1" ]] || return 0
 
-  local fish_path
-  fish_path="$(command -v fish)"
-  [[ -n "${fish_path}" ]] || die "fish not found after install"
+  local shell_path=""
+  case "${DEFAULT_SHELL}" in
+    fish) shell_path="$(command -v fish)" ;;
+    zsh) shell_path="$(command -v zsh)" ;;
+  esac
+  [[ -n "${shell_path}" ]] || die "${DEFAULT_SHELL} not found after install"
 
-  if [[ "$(getent passwd "${TARGET_USER}" 2>/dev/null || grep "^${TARGET_USER}:" /etc/passwd)" != *"${fish_path}" ]]; then
-    as_root chsh -s "${fish_path}" "${TARGET_USER}"
+  if [[ "$(getent passwd "${TARGET_USER}" 2>/dev/null || grep "^${TARGET_USER}:" /etc/passwd)" != *"${shell_path}" ]]; then
+    as_root chsh -s "${shell_path}" "${TARGET_USER}"
   fi
 }
 
 main() {
+  validate_choices
   install_packages
   install_rust
   install_homebrew
   install_starship
+  install_fnm_and_node
   install_brew_packages
+  ensure_default_editor_installed
   install_cargo_packages
   install_zen_browser
   cleanup_legacy_prompt_config
   write_starship_config
   write_git_config
   write_fish_config
+  write_fish_autostart
+  write_zsh_config
+  write_zsh_autostart
+  write_bash_profile
   write_fcitx_config
   write_fcitx_profile
-  write_sway_session_wrapper
+  write_session_wrapper
   write_chromium_wrapper
   write_zen_wrapper
   write_swaybar_status
-  write_sway_autostart
   configure_timezone
   configure_time_sync
-  write_sway_config_override
+  write_window_manager_config
   fix_ownership
   set_default_shell
-  log "configured git, fish, Starship (Tokyo Night), Rust, Homebrew tools, Cargo tools, Ghostty, Zen Browser, Neovim, Fcitx5 Chinese input, timezone, and time sync for ${TARGET_USER}"
+  log "configured ${DEFAULT_SHELL}, ${DEFAULT_EDITOR}, ${WINDOW_MANAGER}, fnm, Starship, Rust, Homebrew tools, Cargo tools, Ghostty, Zen Browser, Chromium, Fcitx5 Chinese input, timezone, and time sync for ${TARGET_USER}"
 }
 
 main "$@"

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -116,5 +117,59 @@ func TestPrepareDiskCompressedBaseImage(t *testing.T) {
 	}
 	if info.Size() != 8*1024*1024 {
 		t.Fatalf("unexpected disk size: got %d want %d", info.Size(), 8*1024*1024)
+	}
+}
+
+func TestChoiceEnv(t *testing.T) {
+	got, err := choiceEnv(map[string]string{"VM_DEFAULT_SHELL": "zsh"}, "VM_DEFAULT_SHELL", "fish", "fish", "zsh")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "zsh" {
+		t.Fatalf("unexpected value: %q", got)
+	}
+
+	if _, err := choiceEnv(map[string]string{"VM_DEFAULT_SHELL": "bash"}, "VM_DEFAULT_SHELL", "fish", "fish", "zsh"); err == nil {
+		t.Fatal("expected validation error")
+	}
+}
+
+func TestUpdateDotEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".vmctl.env")
+	initial := strings.Join([]string{
+		"# existing config",
+		"VM_NAME=void-dev",
+		"VM_DEFAULT_SHELL=fish",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := UpdateDotEnvFile(path, map[string]string{
+		"VM_DEFAULT_SHELL":  "zsh",
+		"VM_DEFAULT_EDITOR": "helix",
+		"VM_WINDOW_MANAGER": "xfce",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		"# existing config",
+		"VM_NAME=void-dev",
+		"VM_DEFAULT_SHELL=zsh",
+		"VM_DEFAULT_EDITOR=helix",
+		"VM_WINDOW_MANAGER=xfce",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in %s", want, text)
+		}
 	}
 }

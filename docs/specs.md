@@ -194,6 +194,7 @@ Default behavior:
 ### 6.5 Development Environment
 
 - `fish`
+- `zsh`
 - `starship`
 - `neovim`
 - `rustup`
@@ -201,6 +202,7 @@ Default behavior:
 - `helix`
 - `zellij`
 - `zig`
+- `fnm`
 - `opencode`
 - `lazygit`
 - `gitui`
@@ -215,18 +217,29 @@ Constraints:
 
 ## 7. Shell, Git, And Time
 
-### 7.1 Fish And Starship
+### 7.1 Shell, Editor, And Prompt
 
 Requirements:
 
-- default shell: `fish`
+- default shell: `fish` or `zsh`
+- default editor: `neovim` or `helix`
 - default prompt theme: `Tokyo Night`
 - Starship config path: `~/.config/starship.toml`
 - Fish init line: `starship init fish | source`
+- Zsh init line: `eval "$(starship init zsh)"`
 - default preset source: `https://starship.rs/presets/toml/tokyo-night.toml`
 - true-color shell support enabled
 
-### 7.2 Git
+### 7.2 Node.js
+
+Requirements:
+
+- install `fnm` via Linux Homebrew
+- enable `fnm` in the configured shell
+- install the latest LTS Node.js release through `fnm`
+- prefer `fnm`-managed Node.js over a Homebrew-managed `node`
+
+### 7.3 Git
 
 Bootstrap must initialize `~/.gitconfig` with at least:
 
@@ -241,7 +254,7 @@ It must also support:
 - `VM_GIT_USER_NAME`
 - `VM_GIT_USER_EMAIL`
 
-### 7.3 Time
+### 7.4 Time
 
 Requirements:
 
@@ -279,10 +292,21 @@ Typical override groups:
 - accounts: `VM_GUEST_USER`, `VM_GUEST_PASSWORD`, `VM_ROOT_PASSWORD`
 - SSH: `VM_SSH_PUBLIC_KEY`, `VM_SSH_KNOWN_HOSTS_FILE`
 - image source: `VM_BASE_IMAGE`, `VM_BASE_IMAGE_URL`
+- shell/editor/window manager: `VM_DEFAULT_SHELL`, `VM_DEFAULT_EDITOR`, `VM_WINDOW_MANAGER`
 - display: `VM_WIDTH`, `VM_HEIGHT`
 - bootstrap packages: `VM_BOOTSTRAP_BREW_PACKAGES`, `VM_BOOTSTRAP_CARGO_PACKAGES`
 - prompt preset: `VM_STARSHIP_PRESET_URL`
 - git identity: `VM_GIT_USER_NAME`, `VM_GIT_USER_EMAIL`
+
+GUI requirements:
+
+- `vmctl` with no subcommand should open a Fyne control panel
+- the main GUI should expose exactly four primary actions: `bootstrap`, `start`, `stop`, and `destroy`
+- shell/editor/window manager preferences should be collected from the `bootstrap` popup, not shown as persistent controls on the main screen
+- `start` and `stop` should stay disabled until bootstrap has completed
+- `destroy` should warn before removing generated VM state
+- the GUI should show whether the VM is running
+- the GUI should sample guest CPU and memory usage over SSH when available
 
 ## 10. Acceptance Criteria
 

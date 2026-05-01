@@ -18,7 +18,7 @@ func NewRootCommand() (*cobra.Command, error) {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
+			return LaunchControlGUI()
 		},
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
@@ -29,7 +29,9 @@ func NewRootCommand() (*cobra.Command, error) {
 	rootCmd.AddCommand(
 		newStartCommand(cfg),
 		newStopCommand(cfg),
+		newDestroyCommand(cfg),
 		newStatusCommand(cfg),
+		newGUICommand(cfg),
 		newBootstrapCommand(cfg),
 		newClipInCommand(cfg),
 		newClipOutCommand(cfg),
@@ -38,6 +40,17 @@ func NewRootCommand() (*cobra.Command, error) {
 	)
 
 	return rootCmd, nil
+}
+
+func newGUICommand(cfg Config) *cobra.Command {
+	return &cobra.Command{
+		Use:   "gui",
+		Short: "Open the Fyne VM control panel",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return LaunchControlGUI()
+		},
+	}
 }
 
 func newStartCommand(cfg Config) *cobra.Command {
@@ -62,6 +75,17 @@ func newStopCommand(cfg Config) *cobra.Command {
 	}
 }
 
+func newDestroyCommand(cfg Config) *cobra.Command {
+	return &cobra.Command{
+		Use:   "destroy",
+		Short: "Stop the VM and remove generated VM state and disk files",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return Destroy(cfg)
+		},
+	}
+}
+
 func newStatusCommand(cfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
@@ -79,7 +103,7 @@ func newBootstrapCommand(cfg Config) *cobra.Command {
 		Short: "Configure fish + Starship + Rust + Homebrew + desktop tools inside the guest over SSH",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return Bootstrap(cfg)
+			return BootstrapSetup(cfg)
 		},
 	}
 }

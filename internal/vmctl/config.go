@@ -38,6 +38,9 @@ type Config struct {
 	SSHPublicKey           string
 	SSHKnownHostsFile      string
 	Timezone               string
+	DefaultShell           string
+	DefaultEditor          string
+	WindowManager          string
 	StarshipPresetURL      string
 	BootstrapBrewPackages  string
 	BootstrapCargoPackages string
@@ -116,6 +119,15 @@ func LoadConfig() (Config, error) {
 	cfg.SSHPublicKey = envOr(env, "VM_SSH_PUBLIC_KEY", filepath.Join(homeDir, ".ssh", "id_ed25519.pub"))
 	cfg.SSHKnownHostsFile = envOr(env, "VM_SSH_KNOWN_HOSTS_FILE", "")
 	cfg.Timezone = envOr(env, "VM_TIMEZONE", "Australia/Sydney")
+	if cfg.DefaultShell, err = choiceEnv(env, "VM_DEFAULT_SHELL", "fish", "fish", "zsh"); err != nil {
+		return Config{}, err
+	}
+	if cfg.DefaultEditor, err = choiceEnv(env, "VM_DEFAULT_EDITOR", "neovim", "neovim", "helix"); err != nil {
+		return Config{}, err
+	}
+	if cfg.WindowManager, err = choiceEnv(env, "VM_WINDOW_MANAGER", "sway", "sway", "xfce"); err != nil {
+		return Config{}, err
+	}
 	cfg.StarshipPresetURL = envOr(env, "VM_STARSHIP_PRESET_URL", "https://starship.rs/presets/toml/tokyo-night.toml")
 	cfg.BootstrapBrewPackages = envOr(env, "VM_BOOTSTRAP_BREW_PACKAGES", "")
 	cfg.BootstrapCargoPackages = envOr(env, "VM_BOOTSTRAP_CARGO_PACKAGES", "")
@@ -143,13 +155,17 @@ func LoadConfig() (Config, error) {
 }
 
 func Usage(cfg Config) string {
-	return fmt.Sprintf(`Usage: go run ./cmd/vmctl <command>
+	return fmt.Sprintf(`Usage:
+  go run ./cmd/vmctl           # open the GUI control panel
+  go run ./cmd/vmctl <command>
 
 Commands:
   start      Create missing assets and start the VM
   stop       Stop the VM via vfkit REST API
+  destroy    Stop the VM and remove generated VM state and disk files
   status     Show VM state and effective network target
-  bootstrap  Configure fish + Starship + Rust + Homebrew + desktop tools inside the guest over SSH
+  gui        Open the Fyne VM control panel
+  bootstrap  Run the guided bootstrap flow and write bootstrap.done
   clip-in    Copy the macOS clipboard into the guest Wayland clipboard
   clip-out   Copy the guest Wayland clipboard into the macOS clipboard
   ssh        SSH into the guest using the configured static IP
@@ -169,6 +185,9 @@ Important environment variables:
   VM_ROOT_PASSWORD=root
   VM_SSH_PUBLIC_KEY=%s
   VM_TIMEZONE=%s
+  VM_DEFAULT_SHELL=fish
+  VM_DEFAULT_EDITOR=neovim
+  VM_WINDOW_MANAGER=sway
   VM_VOID_REPOSITORY=%s
   VM_STARSHIP_PRESET_URL=https://starship.rs/presets/toml/tokyo-night.toml
   VM_BOOTSTRAP_BREW_PACKAGES="helix zellij zig opencode lazygit gitui"
@@ -178,6 +197,7 @@ Important environment variables:
   VM_GUI=1
 
 Notes:
+  - Running vmctl with no subcommand opens the GUI control panel.
   - By default vmctl uses the official Void Linux aarch64 glibc ROOTFS tarball
     and builds a bootable raw disk with podman.
   - The generated VM uses direct kernel boot via vfkit --kernel/--initrd and
@@ -254,4 +274,17 @@ func boolEnv(env map[string]string, key string, fallback bool) (bool, error) {
 		}
 	}
 	return fallback, nil
+}
+
+func choiceEnv(env map[string]string, key, fallback string, allowed ...string) (string, error) {
+	value := fallback
+	if raw, ok := env[key]; ok && raw != "" {
+		value = raw
+	}
+	for _, option := range allowed {
+		if value == option {
+			return value, nil
+		}
+	}
+	return "", fmt.Errorf("%s must be one of: %s", key, strings.Join(allowed, ", "))
 }

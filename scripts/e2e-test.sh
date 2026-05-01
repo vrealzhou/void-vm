@@ -87,6 +87,8 @@ BOOTSTRAP_MARKER="$(cat "${STATE_DIR}/bootstrap.done")"
 ssh_vm "fish -lc '
   command -v brew >/tmp/brew-path.txt
   command -v starship >/tmp/starship-path.txt
+  command -v fnm >/tmp/fnm-path.txt
+  command -v node >/tmp/node-path.txt
   command -v hx >/tmp/hx-path.txt
   command -v zellij >/tmp/zellij-path.txt
   command -v zig >/tmp/zig-path.txt
@@ -95,6 +97,8 @@ ssh_vm "fish -lc '
   fish --version >/tmp/fish-version.txt
   brew --version >/tmp/brew-version.txt
   starship --version >/tmp/starship-version.txt
+  fnm --version >/tmp/fnm-version.txt
+  node --version >/tmp/node-version.txt
   hx --version >/tmp/hx-version.txt
   zellij --version >/tmp/zellij-version.txt
   zig version >/tmp/zig-version.txt
@@ -104,9 +108,11 @@ ssh_vm "fish -lc '
 test -f ~/.config/starship.toml && \
 test ! -e ~/.config/oh-my-posh && \
 test ! -e ~/.config/fish/conf.d/oh-my-posh.fish && \
-grep -q 'starship init fish' ~/.config/fish/conf.d/starship.fish && \
-grep -q '.cargo/bin' ~/.config/fish/conf.d/starship.fish && \
-grep -q 'brew shellenv' ~/.config/fish/conf.d/starship.fish && \
+grep -q 'starship init fish' ~/.config/fish/conf.d/vmctl-shell.fish && \
+grep -q '.cargo/bin' ~/.config/fish/conf.d/vmctl-shell.fish && \
+grep -q 'brew shellenv' ~/.config/fish/conf.d/vmctl-shell.fish && \
+grep -q 'fnm env --use-on-cd --shell fish' ~/.config/fish/conf.d/vmctl-shell.fish && \
+grep -q 'editor = nvim' ~/.gitconfig && \
 getent passwd ${VM_USER} | grep -q '/usr/bin/fish' && \
 sudo sv status NetworkManager sshd dbus seatd chronyd >/tmp/service-status.txt"
 

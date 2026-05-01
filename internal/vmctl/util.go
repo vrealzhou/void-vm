@@ -461,6 +461,13 @@ func boolString(v bool) string {
 	return "0"
 }
 
+func writeBootstrapMarker(cfg Config) error {
+	if err := os.MkdirAll(filepath.Dir(cfg.BootstrapMarker), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(cfg.BootstrapMarker, []byte(time.Now().Format(time.RFC3339)+"\n"), 0o644)
+}
+
 func logf(format string, args ...any) {
 	fmt.Printf("[vmctl] %s\n", fmt.Sprintf(format, args...))
 }
