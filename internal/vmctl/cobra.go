@@ -37,6 +37,7 @@ func NewRootCommand() (*cobra.Command, error) {
 		newClipOutCommand(cfg),
 		newSSHCommand(cfg),
 		newIPCommand(cfg),
+		newSyncCommand(cfg),
 	)
 
 	return rootCmd, nil
