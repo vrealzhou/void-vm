@@ -310,10 +310,16 @@ func LaunchControlGUI() error {
 		resourceLabel,
 	)
 
+	syncPanel := makeSyncPanel(cfg, w, func() {
+		refreshStatus()
+	})
+
 	leftPane := container.NewVBox(
 		guideLabel,
 		widget.NewSeparator(),
 		buttonPane,
+		widget.NewSeparator(),
+		syncPanel,
 	)
 
 	split := container.NewHSplit(leftPane, statusPane)
