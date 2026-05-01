@@ -171,6 +171,7 @@ Commands:
   ssh        SSH into the guest using the configured static IP
   ip         Print the configured guest IP
   sync       Manage file sync pairs between host and VM
+  tunnel     Manage SSH tunnels
 
 Important environment variables:
   VM_MEMORY_MIB=6144

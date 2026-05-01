@@ -38,6 +38,7 @@ func NewRootCommand() (*cobra.Command, error) {
 		newSSHCommand(cfg),
 		newIPCommand(cfg),
 		newSyncCommand(cfg),
+		newTunnelCommand(cfg),
 	)
 
 	return rootCmd, nil
