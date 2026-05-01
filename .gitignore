@@ -3,3 +3,5 @@
 .cache-test
 .DS_Store
 images/*
+vmctl
+.vmctl.*

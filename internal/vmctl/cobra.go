@@ -18,7 +18,7 @@ func NewRootCommand() (*cobra.Command, error) {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return LaunchControlGUI()
+			return LaunchWebServer("")
 		},
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
@@ -50,14 +50,17 @@ func NewRootCommand() (*cobra.Command, error) {
 }
 
 func newGUICommand(cfg Config) *cobra.Command {
-	return &cobra.Command{
+	var port string
+	cmd := &cobra.Command{
 		Use:   "gui",
-		Short: "Open the Fyne VM control panel",
+		Short: "Open the Web VM control panel",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return LaunchControlGUI()
+			return LaunchWebServer(port)
 		},
 	}
+	cmd.Flags().StringVar(&port, "port", "", "Server port (default: 8080 or VM_MANAGER_PORT env)")
+	return cmd
 }
 
 func newStartCommand(cfg Config) *cobra.Command {
