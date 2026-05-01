@@ -314,12 +314,18 @@ func LaunchControlGUI() error {
 		refreshStatus()
 	})
 
+	tunnelPanel := makeTunnelPanel(cfg, w, func() {
+		refreshStatus()
+	})
+
 	leftPane := container.NewVBox(
 		guideLabel,
 		widget.NewSeparator(),
 		buttonPane,
 		widget.NewSeparator(),
 		syncPanel,
+		widget.NewSeparator(),
+		tunnelPanel,
 	)
 
 	split := container.NewHSplit(leftPane, statusPane)
