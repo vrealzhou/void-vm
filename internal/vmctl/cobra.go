@@ -22,8 +22,13 @@ func NewRootCommand() (*cobra.Command, error) {
 		},
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	defaultHelp := rootCmd.HelpFunc()
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		fmt.Fprint(cmd.OutOrStdout(), Usage(cfg))
+		if cmd == rootCmd {
+			fmt.Fprint(cmd.OutOrStdout(), Usage(cfg))
+		} else {
+			defaultHelp(cmd, args)
+		}
 	})
 
 	rootCmd.AddCommand(
