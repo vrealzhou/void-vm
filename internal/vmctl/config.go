@@ -112,9 +112,9 @@ func LoadConfig() (Config, error) {
 	}
 	cfg.DNSServers = envOr(env, "VM_DNS_SERVERS", "1.1.1.1,8.8.8.8")
 
-	cfg.SSHUser = envOr(env, "VM_SSH_USER", "dev")
-	cfg.GuestUser = envOr(env, "VM_GUEST_USER", "dev")
-	cfg.GuestPassword = envOr(env, "VM_GUEST_PASSWORD", "dev")
+	cfg.SSHUser = envOr(env, "VM_SSH_USER", "vm")
+	cfg.GuestUser = envOr(env, "VM_GUEST_USER", "vm")
+	cfg.GuestPassword = envOr(env, "VM_GUEST_PASSWORD", "vm")
 	cfg.RootPassword = envOr(env, "VM_ROOT_PASSWORD", "root")
 	cfg.SSHPublicKey = envOr(env, "VM_SSH_PUBLIC_KEY", filepath.Join(homeDir, ".ssh", "id_ed25519.pub"))
 	cfg.SSHKnownHostsFile = envOr(env, "VM_SSH_KNOWN_HOSTS_FILE", "")
@@ -181,9 +181,9 @@ Important environment variables:
   VM_IMAGE_DIR=%s
   VM_BASE_IMAGE=%s
   VM_BASE_IMAGE_URL=%s
-  VM_SSH_USER=dev
-  VM_GUEST_USER=dev
-  VM_GUEST_PASSWORD=dev
+  VM_SSH_USER=vm
+  VM_GUEST_USER=vm
+  VM_GUEST_PASSWORD=vm
   VM_ROOT_PASSWORD=root
   VM_SSH_PUBLIC_KEY=%s
   VM_TIMEZONE=%s

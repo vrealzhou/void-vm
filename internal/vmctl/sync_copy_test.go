@@ -237,13 +237,13 @@ func TestListBackupsIgnoresNonTimestampDirs(t *testing.T) {
 
 func TestBuildRsyncArgsHostToVM(t *testing.T) {
 	cfg := Config{
-		SSHUser:  "dev",
+		SSHUser:  "vm",
 		StaticIP: "192.168.64.10",
 	}
 	pair := SyncPair{
 		ID:       "myapp",
-		HostPath: "/Users/dev/myapp",
-		VMPath:   "/home/dev/myapp",
+		HostPath: "/Users/vm/myapp",
+		VMPath:   "/home/vm/myapp",
 		Exclude:  []string{"*.tmp", ".DS_Store"},
 	}
 
@@ -254,7 +254,7 @@ func TestBuildRsyncArgsHostToVM(t *testing.T) {
 		"-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
 		"--exclude", "*.tmp",
 		"--exclude", ".DS_Store",
-		"/Users/dev/myapp/", "dev@192.168.64.10:/home/dev/myapp/",
+		"/Users/vm/myapp/", "vm@192.168.64.10:/home/vm/myapp/",
 	}
 
 	if len(args) != len(want) {
@@ -269,13 +269,13 @@ func TestBuildRsyncArgsHostToVM(t *testing.T) {
 
 func TestBuildRsyncArgsVMToHost(t *testing.T) {
 	cfg := Config{
-		SSHUser:  "dev",
+		SSHUser:  "vm",
 		StaticIP: "192.168.64.10",
 	}
 	pair := SyncPair{
 		ID:          "docs",
-		HostPath:    "/Users/dev/docs",
-		VMPath:      "/home/dev/docs",
+		HostPath:    "/Users/vm/docs",
+		VMPath:      "/home/vm/docs",
 		ExcludeFrom: "/tmp/exclude.txt",
 	}
 
@@ -285,7 +285,7 @@ func TestBuildRsyncArgsVMToHost(t *testing.T) {
 		"-avz", "--delete",
 		"-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
 		"--exclude-from", "/tmp/exclude.txt",
-		"dev@192.168.64.10:/home/dev/docs/", "/Users/dev/docs/",
+		"vm@192.168.64.10:/home/vm/docs/", "/Users/vm/docs/",
 	}
 
 	if len(args) != len(want) {

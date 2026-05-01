@@ -155,7 +155,7 @@ func showAddPairDialog(cfg Config, w fyne.Window, refresh func()) {
 			if bareRepoEntry.Text != "" {
 				pair.BareRepoPath = bareRepoEntry.Text
 			} else {
-				pair.BareRepoPath = defaultBareRepoPath(pair)
+				pair.BareRepoPath = defaultBareRepoPath(cfg, pair)
 			}
 		} else {
 			pair.Mode = SyncModeCopy

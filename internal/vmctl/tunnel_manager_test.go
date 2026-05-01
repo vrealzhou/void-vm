@@ -9,7 +9,7 @@ import (
 
 func TestBuildSSHCommandLocalForward(t *testing.T) {
 	cfg := Config{
-		SSHUser:  "dev",
+		SSHUser:  "vm",
 		StaticIP: "192.168.64.10",
 	}
 	tunnel := Tunnel{
@@ -35,7 +35,7 @@ func TestBuildSSHCommandLocalForward(t *testing.T) {
 		"-o", "ServerAliveInterval=30",
 		"-o", "ServerAliveCountMax=3",
 		"-o", "ExitOnForwardFailure=yes",
-		"dev@192.168.64.10",
+		"vm@192.168.64.10",
 	}
 
 	for _, want := range expected {
@@ -54,7 +54,7 @@ func TestBuildSSHCommandLocalForward(t *testing.T) {
 
 func TestBuildSSHCommandRemoteForward(t *testing.T) {
 	cfg := Config{
-		SSHUser:  "dev",
+		SSHUser:  "vm",
 		StaticIP: "192.168.64.10",
 	}
 	tunnel := Tunnel{
@@ -96,7 +96,7 @@ func TestBuildSSHCommandRemoteForward(t *testing.T) {
 
 func TestBuildSSHCommandWithKnownHosts(t *testing.T) {
 	cfg := Config{
-		SSHUser:           "dev",
+		SSHUser:           "vm",
 		StaticIP:          "192.168.64.10",
 		SSHKnownHostsFile: "/tmp/known_hosts",
 	}
@@ -305,7 +305,7 @@ func TestStartAutoTunnelsSkipsNonAutoStart(t *testing.T) {
 		RepoRoot: t.TempDir(),
 		StateDir: t.TempDir(),
 		StaticIP: "192.168.64.10",
-		SSHUser:  "dev",
+		SSHUser:  "vm",
 	}
 
 	tc := TunnelConfig{

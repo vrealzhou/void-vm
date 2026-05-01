@@ -87,7 +87,7 @@ func newSyncAddGitCommand(cfg Config) *cobra.Command {
 			if bareRepo != "" {
 				pair.BareRepoPath = bareRepo
 			} else {
-				pair.BareRepoPath = defaultBareRepoPath(pair)
+				pair.BareRepoPath = defaultBareRepoPath(cfg, pair)
 			}
 
 			sc, err := LoadSyncConfig(syncConfigPath(cfg))

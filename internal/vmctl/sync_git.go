@@ -10,14 +10,14 @@ import (
 
 // defaultBareRepoPath generates the default bare repo path inside the VM
 // based on the host path's basename.
-func defaultBareRepoPath(pair SyncPair) string {
+func defaultBareRepoPath(cfg Config, pair SyncPair) string {
 	base := filepath.Base(pair.HostPath)
-	return "/home/dev/repos/" + base + "/repo.git"
+	return "/home/" + cfg.GuestUser + "/repos/" + base + "/repo.git"
 }
 
 // gitRemoteURL generates the SSH remote URL for the bare repo on the VM.
 func gitRemoteURL(cfg Config, pair SyncPair) string {
-	relPath := strings.TrimPrefix(pair.BareRepoPath, "/home/dev/")
+	relPath := strings.TrimPrefix(pair.BareRepoPath, "/home/"+cfg.GuestUser+"/")
 	return fmt.Sprintf("ssh://%s@%s/~/%s", cfg.SSHUser, cfg.StaticIP, relPath)
 }
 

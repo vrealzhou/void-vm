@@ -7,11 +7,14 @@ import (
 )
 
 func TestDefaultBareRepoPath(t *testing.T) {
-	pair := SyncPair{
-		HostPath: "/Users/dev/projects/myapp",
+	cfg := Config{
+		GuestUser: "vm",
 	}
-	got := defaultBareRepoPath(pair)
-	want := "/home/dev/repos/myapp/repo.git"
+	pair := SyncPair{
+		HostPath: "/Users/vm/projects/myapp",
+	}
+	got := defaultBareRepoPath(cfg, pair)
+	want := "/home/vm/repos/myapp/repo.git"
 	if got != want {
 		t.Errorf("defaultBareRepoPath() = %q, want %q", got, want)
 	}
@@ -19,14 +22,15 @@ func TestDefaultBareRepoPath(t *testing.T) {
 
 func TestGitRemoteURL(t *testing.T) {
 	cfg := Config{
-		SSHUser:  "dev",
-		StaticIP: "192.168.64.10",
+		SSHUser:   "vm",
+		StaticIP:  "192.168.64.10",
+		GuestUser: "vm",
 	}
 	pair := SyncPair{
-		BareRepoPath: "/home/dev/repos/myapp/repo.git",
+		BareRepoPath: "/home/vm/repos/myapp/repo.git",
 	}
 	got := gitRemoteURL(cfg, pair)
-	want := "ssh://dev@192.168.64.10/~/repos/myapp/repo.git"
+	want := "ssh://vm@192.168.64.10/~/repos/myapp/repo.git"
 	if got != want {
 		t.Errorf("gitRemoteURL() = %q, want %q", got, want)
 	}
