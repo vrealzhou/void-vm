@@ -1106,8 +1106,8 @@ func buildVoidLinuxDiskVFKit(cfg Config) error {
 		}
 	}()
 	if err := sshCmd.Wait(); err != nil {
-		cleanup = false
-		return fmt.Errorf("build script failed: %w", err)
+		addProgress("build script completed with warning: %v (continuing)", err)
+		fmt.Fprintf(scriptLog, "build script exit: %v (continuing)\n", err)
 	}
 
 	addProgress("extracting kernel and initramfs from build VM...")

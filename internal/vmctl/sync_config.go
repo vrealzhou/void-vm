@@ -24,7 +24,7 @@ type SyncPair struct {
 	ID                  string        `json:"id" yaml:"id"`
 	Mode                SyncMode      `json:"mode" yaml:"mode"`
 	HostPath            string        `json:"host_path" yaml:"host_path"`
-	VMPath              string        `json:"vm_path" yaml:"guest_path"`
+	VMPath              string        `json:"vm_path" yaml:"target_path"`
 	BareRepoPath        string        `json:"bare_repo_path,omitempty" yaml:"bare_repo_path,omitempty"`
 	Direction           SyncDirection `json:"direction,omitempty" yaml:"direction,omitempty"`
 	Exclude             []string      `json:"exclude,omitempty" yaml:"exclude,omitempty"`
