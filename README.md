@@ -17,6 +17,8 @@ This is not a general-purpose VM abstraction layer. The goal is narrower: build 
 
 **Platform:** Apple Silicon macOS only. `vfkit` uses Apple's Virtualization framework.
 
+_Windows/Linux support would require replacing vfkit with QEMU. The disk image, kernel, and initrd are platform-agnostic — only the hypervisor layer needs changing. See `internal/vmctl/vm.go` (vfkitArgs) and `build_vfkit.go` (buildVoidLinuxDiskVFKit) for the integration points._
+
 ```bash
 vfkit
 qemu-img
