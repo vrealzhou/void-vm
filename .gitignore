@@ -1,7 +1,4 @@
 .vm
-.vmctl.env
 .cache-test
 .DS_Store
-images/*
 /vmctl
-.vmctl.*
