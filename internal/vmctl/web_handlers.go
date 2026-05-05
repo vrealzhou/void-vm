@@ -46,7 +46,7 @@ func handleStatus(cfg Config) echo.HandlerFunc {
 				"brewPackages":  strings.Fields(cfg.BootstrapBrewPackages),
 				"cargoPackages": parseCargoPackagesForWeb(cfg.BootstrapCargoPackages),
 				"hooks":         cfg.BootstrapExtraCommands,
-				"userName":      cfg.GuestUser,
+				"userName":      cfg.GitUserName,
 				"userEmail":     cfg.GitUserEmail,
 			},
 		})

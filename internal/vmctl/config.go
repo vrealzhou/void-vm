@@ -144,7 +144,7 @@ func LoadConfig() (Config, error) {
 		BaseImage:              "",
 		BaseImageURL:           "",
 		BuildKernelURL:         "",
-		GUI:                    vcfg.VM.GUI,
+		GUI:                    *vcfg.VM.GUI,
 		Width:                  vcfg.VM.Width,
 		Height:                 vcfg.VM.Height,
 		SyncPairs:              vcfg.Sync,
@@ -222,7 +222,7 @@ func SaveConfig(cfg Config) error {
 	vcfg.VM.CPUs = cfg.CPUs
 	vcfg.VM.MemoryMiB = cfg.MemoryMiB
 	vcfg.VM.DiskSize = cfg.DiskSize
-	vcfg.VM.GUI = cfg.GUI
+	vcfg.VM.GUI = &cfg.GUI
 	vcfg.VM.Width = cfg.Width
 	vcfg.VM.Height = cfg.Height
 	vcfg.Network.StaticIP = cfg.StaticIP

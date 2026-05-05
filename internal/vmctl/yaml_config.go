@@ -24,7 +24,7 @@ type VMConfig struct {
 	CPUs      int    `yaml:"cpus"`
 	MemoryMiB int    `yaml:"memory_mib"`
 	DiskSize  string `yaml:"disk_size"`
-	GUI       bool   `yaml:"gui"`
+	GUI       *bool  `yaml:"gui"`
 	Width     int    `yaml:"width"`
 	Height    int    `yaml:"height"`
 }
@@ -141,6 +141,10 @@ func (c *VMConfigFile) applyDefaults() {
 	}
 	if c.VM.DiskSize == "" {
 		c.VM.DiskSize = "100G"
+	}
+	if c.VM.GUI == nil {
+		t := true
+		c.VM.GUI = &t
 	}
 	if c.Network.StaticIP == "" {
 		c.Network.StaticIP = "192.168.64.10"
