@@ -2,8 +2,10 @@ package vmctl
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 
+	agentvm "github.com/vrealzhou/agent-vm"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 )
@@ -30,12 +32,20 @@ func LaunchWebServer(flagPort string) error {
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestLogger())
 
-	// Static files
-	e.Static("/static", "web/static")
+	// Static files from embedded FS
+	staticFS, err := fs.Sub(agentvm.WebStatic, "web/static")
+	if err != nil {
+		return err
+	}
+	e.StaticFS("/static", staticFS)
 
 	// Main page
 	e.GET("/", func(c *echo.Context) error {
-		return c.File("web/static/index.html")
+		index, err := fs.ReadFile(staticFS, "index.html")
+		if err != nil {
+			return c.String(500, "index.html not found")
+		}
+		return c.HTMLBlob(200, index)
 	})
 
 	// API routes

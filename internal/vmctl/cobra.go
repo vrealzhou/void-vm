@@ -18,9 +18,11 @@ func NewRootCommand() (*cobra.Command, error) {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return LaunchWebServer("")
+			port, _ := cmd.Flags().GetString("port")
+			return LaunchWebServer(port)
 		},
 	}
+	rootCmd.Flags().StringP("port", "p", "", "web UI port (default: 8080)")
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	defaultHelp := rootCmd.HelpFunc()
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
