@@ -21,6 +21,10 @@ func jsonSuccess(c *echo.Context, data any) error {
 
 func handleStatus(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return jsonError(c, http.StatusInternalServerError, err.Error())
+		}
 		status, err := InspectVM(cfg)
 		if err != nil {
 			return jsonError(c, http.StatusInternalServerError, err.Error())
