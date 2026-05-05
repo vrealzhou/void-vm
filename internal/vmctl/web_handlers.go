@@ -373,6 +373,10 @@ func handleAddSync(cfg Config) echo.HandlerFunc {
 		if err := c.Bind(&req); err != nil {
 			return jsonError(c, http.StatusBadRequest, "invalid request")
 		}
+		cfg, err := LoadConfig()
+		if err != nil {
+			return jsonError(c, http.StatusInternalServerError, err.Error())
+		}
 		pair := SyncPair{
 			ID:        filepath.Base(req.HostPath),
 			HostPath:  req.HostPath,
