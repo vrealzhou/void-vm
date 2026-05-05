@@ -321,7 +321,7 @@ els.btnAddTunnel.onclick = () => {
 async function loadSync() {
     try {
         const data = await API.get('/api/sync');
-        const pairs = data.Pairs || [];
+        const pairs = data.sync_pairs || [];
         els.syncList.innerHTML = pairs.length === 0
             ? '<div class="list-item">No sync pairs configured.</div>'
             : pairs.map(p => `
