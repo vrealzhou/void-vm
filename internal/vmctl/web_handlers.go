@@ -196,6 +196,10 @@ func handleUpgradeKernel(cfg Config) echo.HandlerFunc {
 
 func handleListTunnels(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return jsonError(c, http.StatusInternalServerError, err.Error())
+		}
 		tc, err := LoadTunnelConfig(tunnelConfigPath(cfg))
 		if err != nil {
 			return jsonError(c, http.StatusInternalServerError, err.Error())
@@ -350,6 +354,10 @@ func handleProgress() echo.HandlerFunc {
 
 func handleListSync(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
+		cfg, err := LoadConfig()
+		if err != nil {
+			return jsonError(c, http.StatusInternalServerError, err.Error())
+		}
 		sc, err := LoadSyncConfig(syncConfigPath(cfg))
 		if err != nil {
 			return jsonError(c, http.StatusInternalServerError, err.Error())
@@ -439,6 +447,10 @@ func handleRemoveSync(cfg Config) echo.HandlerFunc {
 func handleRunSync(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		id := c.Param("id")
+		cfg, err := LoadConfig()
+		if err != nil {
+			return jsonError(c, http.StatusInternalServerError, err.Error())
+		}
 		sc, err := LoadSyncConfig(syncConfigPath(cfg))
 		if err != nil {
 			return jsonError(c, http.StatusInternalServerError, err.Error())
