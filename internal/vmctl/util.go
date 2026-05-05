@@ -164,6 +164,7 @@ func downloadFile(rawURL, destination string) error {
 			"--fail",
 			"--location",
 			"--http1.1",
+			"--progress-bar",
 			"--retry", "5",
 			"--retry-delay", "2",
 			"--output", tmp,
@@ -211,9 +212,36 @@ func downloadFileWithGo(rawURL, tmp string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		out.Close()
-		return err
+
+	total := resp.ContentLength
+	var written int64
+	lastPct := -1
+
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			wn, writeErr := out.Write(buf[:n])
+			if writeErr != nil {
+				out.Close()
+				return writeErr
+			}
+			written += int64(wn)
+			if total > 0 {
+				pct := int(float64(written) / float64(total) * 100)
+				if pct/10 != lastPct {
+					lastPct = pct / 10
+					addProgress("download: %d%% (%.1f MB / %.1f MB)", pct, float64(written)/1024/1024, float64(total)/1024/1024)
+				}
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			out.Close()
+			return readErr
+		}
 	}
 	return out.Close()
 }
@@ -469,15 +497,22 @@ func writeBootstrapMarker(cfg Config) error {
 }
 
 func logf(format string, args ...any) {
-	fmt.Printf("[vmctl] %s\n", fmt.Sprintf(format, args...))
+	msg := fmt.Sprintf(format, args...)
+	fmt.Printf("[vmctl] %s\n", msg)
+	addProgress("%s", msg)
 }
 
 func waitForSSH(cfg Config, user string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	attempt := 0
 	for time.Now().Before(deadline) {
+		attempt++
 		cmd := exec.Command("ssh", append(sshArgsForUser(cfg, user), "true")...)
 		if err := cmd.Run(); err == nil {
 			return nil
+		}
+		if attempt%5 == 1 {
+			addProgress("waiting for SSH on %s@%s...", user, cfg.StaticIP)
 		}
 		time.Sleep(2 * time.Second)
 	}

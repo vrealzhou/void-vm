@@ -1,6 +1,7 @@
 package vmctl
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -45,11 +46,13 @@ func Start(cfg Config) error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
 	logf("starting %s", cfg.Name)
+	addProgress("launching vfkit...")
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 	_ = cmd.Process.Release()
 
+	addProgress("waiting for VM to reach running state...")
 	if err := waitForState(cfg, "VirtualMachineStateRunning", 90*time.Second); err != nil {
 		tail, tailErr := tailFile(cfg.LogFile, 80)
 		if tailErr == nil && tail != "" {
@@ -61,15 +64,18 @@ func Start(cfg Config) error {
 	logf("VM started")
 	if voidBootstrapCandidate && !fileExists(cfg.BootstrapMarker) {
 		logf("waiting for SSH so first-boot bootstrap can finish")
+		addProgress("waiting for VM SSH to become available...")
 		if err := waitForSSH(cfg, cfg.SSHUser, 5*time.Minute); err != nil {
 			return err
 		}
+		addProgress("SSH available, running bootstrap...")
 		if err := Bootstrap(cfg); err != nil {
 			return err
 		}
 		if err := os.WriteFile(cfg.BootstrapMarker, []byte(time.Now().Format(time.RFC3339)+"\n"), 0o644); err != nil {
 			return err
 		}
+		addProgress("bootstrap complete")
 	}
 	if err := StartAutoTunnels(cfg); err != nil {
 		logf("auto-start tunnels: %v", err)
@@ -143,40 +149,47 @@ func SSH(cfg Config, extraArgs []string) error {
 }
 
 func Bootstrap(cfg Config) error {
-	scriptPath := filepath.Join(cfg.RepoRoot, "scripts", "guest-bootstrap.sh")
-	script, err := os.Open(scriptPath)
+	script, err := generateBootstrapScript(cfg)
 	if err != nil {
-		return fmt.Errorf("missing guest bootstrap script")
+		return fmt.Errorf("failed to generate bootstrap script: %w", err)
 	}
-	defer script.Close()
 
-	remoteCmd := fmt.Sprintf(
-		"TARGET_USER=%s DEFAULT_SHELL=%s DEFAULT_EDITOR=%s WINDOW_MANAGER=%s STARSHIP_PRESET_URL=%s SET_DEFAULT_SHELL=%s BOOTSTRAP_XBPS_REPOSITORY=%s BOOTSTRAP_TIMEZONE=%s BOOTSTRAP_BREW_PACKAGES=%s BOOTSTRAP_CARGO_PACKAGES=%s GIT_USER_NAME=%s GIT_USER_EMAIL=%s bash -s",
-		shellQuote(cfg.GuestUser),
-		shellQuote(cfg.DefaultShell),
-		shellQuote(cfg.DefaultEditor),
-		shellQuote(cfg.WindowManager),
-		shellQuote(cfg.StarshipPresetURL),
-		shellQuote(boolString(cfg.SetDefaultShell)),
-		shellQuote(strings.TrimRight(cfg.VoidRepository, "/")+"/current/aarch64"),
-		shellQuote(cfg.Timezone),
-		shellQuote(cfg.BootstrapBrewPackages),
-		shellQuote(cfg.BootstrapCargoPackages),
-		shellQuote(cfg.GitUserName),
-		shellQuote(cfg.GitUserEmail),
-	)
+	scriptPath := filepath.Join(cfg.StateDir, "guest-bootstrap.sh")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		return fmt.Errorf("failed to write bootstrap script: %w", err)
+	}
 
 	logf("configuring %s + %s + %s inside %s", cfg.DefaultShell, cfg.DefaultEditor, cfg.WindowManager, cfg.Name)
-	args := sshArgsForUser(cfg, cfg.SSHUser)
-	args = append(args, remoteCmd)
-	cmd := exec.Command("ssh", args...)
-	cmd.Stdin = script
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	addProgress("running bootstrap script (this may take several minutes)...")
+
+	cmd := exec.Command("ssh", append(sshArgsForUser(cfg, cfg.SSHUser), "bash -s")...)
+	cmd.Stdin = strings.NewReader(script)
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	scannerOut := bufio.NewScanner(stdout)
+	scannerErr := bufio.NewScanner(stderr)
+	go func() {
+		for scannerOut.Scan() {
+			addProgress("%s", scannerOut.Text())
+		}
+	}()
+	go func() {
+		for scannerErr.Scan() {
+			addProgress("%s", scannerErr.Text())
+		}
+	}()
+	if err := cmd.Wait(); err != nil {
+		addProgress("bootstrap script failed: %v", err)
+		return err
+	}
+	return nil
 }
 
 func BootstrapSetup(cfg Config) error {
+	addProgress("starting bootstrap setup...")
 	status, err := InspectVM(cfg)
 	if err != nil {
 		return err
@@ -187,17 +200,111 @@ func BootstrapSetup(cfg Config) error {
 			return err
 		}
 		if fileExists(cfg.BootstrapMarker) {
+			addProgress("VM started, bootstrap already done")
 			return nil
 		}
 	}
 
+	addProgress("waiting for SSH to run bootstrap...")
 	if err := waitForSSH(cfg, cfg.SSHUser, 5*time.Minute); err != nil {
 		return err
 	}
+	addProgress("running bootstrap script...")
 	if err := Bootstrap(cfg); err != nil {
 		return err
 	}
+	addProgress("bootstrap setup complete")
 	return writeBootstrapMarker(cfg)
+}
+
+func UpgradeKernel(cfg Config) (string, error) {
+	if err := waitForSSH(cfg, cfg.SSHUser, 60*time.Second); err != nil {
+		return "", fmt.Errorf("SSH not ready: %w", err)
+	}
+
+	upgradeCmd := "xbps-install -uy linux6.12 && xbps-reconfigure -f linux6.12"
+	cmd := exec.Command("ssh", append(sshArgs(cfg), upgradeCmd)...)
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("kernel upgrade failed: %w", err)
+	}
+	scannerOut := bufio.NewScanner(stdout)
+	scannerErr := bufio.NewScanner(stderr)
+	go func() {
+		for scannerOut.Scan() {
+			addProgress("%s", scannerOut.Text())
+		}
+	}()
+	go func() {
+		for scannerErr.Scan() {
+			addProgress("%s", scannerErr.Text())
+		}
+	}()
+	if err := cmd.Wait(); err != nil {
+		return "", fmt.Errorf("kernel upgrade failed: %w", err)
+	}
+
+	findKernel := "ls -1 /boot/vmlinux-* /boot/vmlinuz-* 2>/dev/null | sort | tail -1"
+	kernelOut, err := exec.Command("ssh", append(sshArgs(cfg), findKernel)...).Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to find kernel: %w", err)
+	}
+	kernelPath := strings.TrimSpace(string(kernelOut))
+	if kernelPath == "" {
+		return "", fmt.Errorf("no kernel found in /boot")
+	}
+
+	findInitrd := "ls -1 /boot/initramfs-*.img 2>/dev/null | sort | tail -1"
+	initrdOut, err := exec.Command("ssh", append(sshArgs(cfg), findInitrd)...).Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to find initrd: %w", err)
+	}
+	initrdPath := strings.TrimSpace(string(initrdOut))
+	if initrdPath == "" {
+		return "", fmt.Errorf("no initramfs found in /boot")
+	}
+
+	if err := copyRemoteFile(cfg, kernelPath, cfg.KernelPath); err != nil {
+		return "", fmt.Errorf("failed to copy kernel: %w", err)
+	}
+	if err := copyRemoteFile(cfg, initrdPath, cfg.InitrdPath); err != nil {
+		return "", fmt.Errorf("failed to copy initrd: %w", err)
+	}
+
+	version := filepath.Base(kernelPath)
+
+	if err := Stop(cfg); err != nil {
+		return version, fmt.Errorf("kernel updated but stop failed: %w", err)
+	}
+	time.Sleep(2 * time.Second)
+	if err := Start(cfg); err != nil {
+		return version, fmt.Errorf("kernel updated but start failed: %w", err)
+	}
+
+	return version, nil
+}
+
+func copyRemoteFile(cfg Config, remotePath, localPath string) error {
+	tmpPath := localPath + ".new"
+	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	cmd := exec.Command("ssh", append(sshArgs(cfg), "cat "+shellQuote(remotePath))...)
+	cmd.Stdout = f
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return os.Rename(tmpPath, localPath)
 }
 
 func prepareDisk(cfg Config) (Config, error) {
@@ -208,6 +315,7 @@ func prepareDisk(cfg Config) (Config, error) {
 	if fileExists(cfg.DiskPath) {
 		if isVoidLinuxRootfsTarball(cfg.BaseImage) && !bootAssetsExist(cfg) {
 			logf("Void boot assets missing; rebuilding VM disk")
+			addProgress("rebuilding VM disk (boot assets missing)...")
 			if err := buildVoidLinuxDisk(cfg); err != nil {
 				return cfg, err
 			}
@@ -215,6 +323,8 @@ func prepareDisk(cfg Config) (Config, error) {
 		return cfg, nil
 	}
 
+	addProgress("preparing VM disk for first boot...")
+	addProgress("resolving base image...")
 	cfg, err := resolveBaseImage(cfg)
 	if err != nil {
 		return cfg, err
@@ -223,6 +333,7 @@ func prepareDisk(cfg Config) (Config, error) {
 	if err := createDiskFromBaseImage(cfg); err != nil {
 		return cfg, err
 	}
+	addProgress("VM disk ready")
 	return cfg, nil
 }
 
@@ -231,17 +342,35 @@ func resolveBaseImage(cfg Config) (Config, error) {
 		cfg.BaseImage = discoverFirstFile(cfg.RepoRoot, "disk")
 	}
 	if cfg.BaseImage == "" {
-		return cfg, fmt.Errorf("no VM disk available. Put exactly one .img/.img.xz/.qcow2/.raw under %s, set VM_BASE_IMAGE, or create %s", cfg.RepoRoot, filepath.Join(cfg.RepoRoot, ".vmctl.env"))
+		matches, _ := filepath.Glob(filepath.Join(cfg.ImageDir, "void-aarch64-ROOTFS-*.tar.xz"))
+		if len(matches) == 1 {
+			cfg.BaseImage = matches[0]
+		}
+	}
+	if cfg.BaseImage == "" {
+		cfg.BaseImage = filepath.Join(cfg.ImageDir, "void-aarch64-ROOTFS.tar.xz")
 	}
 	if fileExists(cfg.BaseImage) {
+		addProgress("base image found: %s", filepath.Base(cfg.BaseImage))
 		return cfg, nil
 	}
 	if cfg.BaseImageURL == "" {
-		return cfg, fmt.Errorf("VM_BASE_IMAGE does not exist: %s", cfg.BaseImage)
+		url, err := resolveRootfsURL(cfg)
+		if err != nil {
+			return cfg, fmt.Errorf("VM_BASE_IMAGE does not exist and auto-resolve failed: %w", err)
+		}
+		cfg.BaseImageURL = url
+	}
+	expectedSize := remoteContentLength(cfg.BaseImageURL)
+	if expectedSize > 0 {
+		addProgress("downloading base image (%.0f MB)...", float64(expectedSize)/1024/1024)
+	} else {
+		addProgress("downloading base image...")
 	}
 	if err := ensureDownloadedFile(cfg.BaseImageURL, cfg.BaseImage); err != nil {
 		return cfg, err
 	}
+	addProgress("base image downloaded")
 	return cfg, nil
 }
 
@@ -263,9 +392,11 @@ func createDiskFromBaseImage(cfg Config) error {
 
 func createDiskFromCompressedRaw(cfg Config) error {
 	logf("creating VM disk from compressed raw base image")
+	addProgress("decompressing base image...")
 	if err := decompressXZToRaw(cfg.BaseImage, cfg.DiskPath); err != nil {
 		return err
 	}
+	addProgress("resizing disk to %s...", cfg.DiskSize)
 	return resizeRawDisk(cfg)
 }
 
@@ -275,6 +406,7 @@ func createDiskFromImageFile(cfg Config) error {
 		return err
 	}
 	logf("creating VM disk from base image (%s)", format)
+	addProgress("converting %s base image to raw disk...", format)
 	if format == "raw" {
 		if err := copyFile(cfg.BaseImage, cfg.DiskPath); err != nil {
 			return err
@@ -341,6 +473,13 @@ func sshArgsForUser(cfg Config, user string) []string {
 			"-o", "UserKnownHostsFile=/dev/null",
 		)
 	}
+	privKey := cfg.SSHPrivateKey
+	if privKey == "" {
+		privKey = strings.TrimSuffix(cfg.SSHPublicKey, ".pub")
+	}
+	if fileExists(privKey) {
+		args = append(args, "-o", "IdentitiesOnly=yes", "-i", privKey)
+	}
 	args = append(args, user+"@"+cfg.StaticIP)
 	return args
 }
@@ -350,9 +489,6 @@ func bootAssetsExist(cfg Config) bool {
 }
 
 func buildVoidLinuxDisk(cfg Config) error {
-	if _, err := exec.LookPath("podman"); err != nil {
-		return fmt.Errorf("missing required command: podman")
-	}
 	if !fileExists(cfg.SSHPublicKey) {
 		return fmt.Errorf("VM_SSH_PUBLIC_KEY does not exist: %s", cfg.SSHPublicKey)
 	}
@@ -361,7 +497,17 @@ func buildVoidLinuxDisk(cfg Config) error {
 		return err
 	}
 
-	logf("building Void Linux VM disk from rootfs tarball")
+	if _, err := exec.LookPath("vfkit"); err == nil {
+		logf("building Void Linux VM disk using vfkit")
+		addProgress("building Void Linux VM disk via vfkit (this takes several minutes)...")
+		return buildVoidLinuxDiskVFKit(cfg)
+	}
+
+	if _, err := exec.LookPath("podman"); err != nil {
+		return fmt.Errorf("missing required command: vfkit or podman")
+	}
+	logf("building Void Linux VM disk using podman")
+	addProgress("building Void Linux VM disk (this takes several minutes)...")
 	builder := exec.Command(
 		"podman", "run", "--rm", "--platform", "linux/arm64",
 		"-e", "DISK_SIZE="+cfg.DiskSize,

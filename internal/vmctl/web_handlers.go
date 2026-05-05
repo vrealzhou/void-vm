@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,16 @@ func handleStatus(cfg Config) echo.HandlerFunc {
 		return jsonSuccess(c, map[string]any{
 			"status":  status,
 			"metrics": metrics,
+			"config": map[string]any{
+				"shell":         cfg.DefaultShell,
+				"editor":        cfg.DefaultEditor,
+				"windowManager": cfg.WindowManager,
+				"memoryMiB":     cfg.MemoryMiB,
+				"diskSize":      cfg.DiskSize,
+				"staticIP":      cfg.StaticIP,
+				"brewPackages":  cfg.BootstrapBrewPackages,
+				"cargoPackages": cfg.BootstrapCargoPackages,
+			},
 		})
 	}
 }
@@ -44,6 +55,11 @@ func handleBootstrap(cfg Config) echo.HandlerFunc {
 		Shell         string `json:"shell"`
 		Editor        string `json:"editor"`
 		WindowManager string `json:"windowManager"`
+		MemoryMiB     int    `json:"memoryMiB"`
+		DiskSize      string `json:"diskSize"`
+		StaticIP      string `json:"staticIP"`
+		BrewPackages  string `json:"brewPackages"`
+		CargoPackages string `json:"cargoPackages"`
 	}
 	return func(c *echo.Context) error {
 		var req bootstrapReq
@@ -52,9 +68,20 @@ func handleBootstrap(cfg Config) echo.HandlerFunc {
 		}
 		cfgPath := DotEnvPath(cfg.RepoRoot)
 		updates := map[string]string{
-			"VM_DEFAULT_SHELL":  req.Shell,
-			"VM_DEFAULT_EDITOR": req.Editor,
-			"VM_WINDOW_MANAGER": req.WindowManager,
+			"VM_DEFAULT_SHELL":           req.Shell,
+			"VM_DEFAULT_EDITOR":          req.Editor,
+			"VM_WINDOW_MANAGER":          req.WindowManager,
+			"VM_BOOTSTRAP_BREW_PACKAGES":  req.BrewPackages,
+			"VM_BOOTSTRAP_CARGO_PACKAGES": req.CargoPackages,
+		}
+		if req.MemoryMiB > 0 {
+			updates["VM_MEMORY_MIB"] = fmt.Sprintf("%d", req.MemoryMiB)
+		}
+		if req.DiskSize != "" {
+			updates["VM_DISK_SIZE"] = req.DiskSize
+		}
+		if req.StaticIP != "" {
+			updates["VM_STATIC_IP"] = req.StaticIP
 		}
 		if err := UpdateDotEnvFile(cfgPath, updates); err != nil {
 			return jsonError(c, http.StatusInternalServerError, err.Error())
@@ -65,7 +92,10 @@ func handleBootstrap(cfg Config) echo.HandlerFunc {
 		}
 		go func() {
 			if err := BootstrapSetup(newCfg); err != nil {
+				addProgress("bootstrap failed: %v", err)
 				fmt.Printf("bootstrap error: %v\n", err)
+			} else {
+				addProgress("bootstrap completed")
 			}
 		}()
 		return jsonSuccess(c, map[string]string{"message": "bootstrap started"})
@@ -76,7 +106,10 @@ func handleStart(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		go func() {
 			if err := Start(cfg); err != nil {
+				addProgress("start failed: %v", err)
 				fmt.Printf("start error: %v\n", err)
+			} else {
+				addProgress("VM started")
 			}
 		}()
 		return jsonSuccess(c, map[string]string{"message": "start initiated"})
@@ -87,7 +120,10 @@ func handleStop(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		go func() {
 			if err := Stop(cfg); err != nil {
+				addProgress("stop failed: %v", err)
 				fmt.Printf("stop error: %v\n", err)
+			} else {
+				addProgress("VM stopped")
 			}
 		}()
 		return jsonSuccess(c, map[string]string{"message": "stop initiated"})
@@ -98,10 +134,36 @@ func handleDestroy(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		go func() {
 			if err := Destroy(cfg); err != nil {
+				addProgress("destroy failed: %v", err)
 				fmt.Printf("destroy error: %v\n", err)
+			} else {
+				addProgress("VM destroyed")
 			}
 		}()
 		return jsonSuccess(c, map[string]string{"message": "destroy initiated"})
+	}
+}
+
+func handleUpgradeKernel(cfg Config) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		status, err := InspectVM(cfg)
+		if err != nil {
+			return jsonError(c, http.StatusInternalServerError, err.Error())
+		}
+		if !status.Running {
+			return jsonError(c, http.StatusServiceUnavailable, "VM is not running")
+		}
+		go func() {
+			version, err := UpgradeKernel(cfg)
+			if err != nil {
+				addProgress("kernel upgrade failed: %v", err)
+				fmt.Printf("kernel upgrade error: %v\n", err)
+			} else {
+				addProgress("kernel upgraded to %s", version)
+				fmt.Printf("[vmctl] kernel upgraded to %s\n", version)
+			}
+		}()
+		return jsonSuccess(c, map[string]string{"message": "kernel upgrade started"})
 	}
 }
 
@@ -241,6 +303,21 @@ func handleStopTunnel(cfg Config) echo.HandlerFunc {
 			return jsonError(c, http.StatusInternalServerError, err.Error())
 		}
 		return jsonSuccess(c, map[string]string{"message": "tunnel stopped"})
+	}
+}
+
+func handleProgress() echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		sinceStr := c.QueryParam("since")
+		var since time.Time
+		if sinceStr != "" {
+			ms, err := strconv.ParseInt(sinceStr, 10, 64)
+			if err == nil {
+				since = time.UnixMilli(ms)
+			}
+		}
+		entries := getProgressSince(since)
+		return jsonSuccess(c, map[string]any{"entries": entries})
 	}
 }
 

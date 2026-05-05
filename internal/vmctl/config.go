@@ -36,6 +36,7 @@ type Config struct {
 	GuestPassword          string
 	RootPassword           string
 	SSHPublicKey           string
+	SSHPrivateKey          string
 	SSHKnownHostsFile      string
 	Timezone               string
 	DefaultShell           string
@@ -47,10 +48,12 @@ type Config struct {
 	GitUserName            string
 	GitUserEmail           string
 	SetDefaultShell        bool
+	BootstrapExtraCommands string
 	VoidRepository         string
 	ImageDir               string
 	BaseImage              string
 	BaseImageURL           string
+	BuildKernelURL         string
 	GUI                    bool
 	Width                  int
 	Height                 int
@@ -110,13 +113,14 @@ func LoadConfig() (Config, error) {
 	if cfg.CIDR, err = intEnv(env, "VM_CIDR", 24); err != nil {
 		return Config{}, err
 	}
-	cfg.DNSServers = envOr(env, "VM_DNS_SERVERS", "1.1.1.1,8.8.8.8")
+	cfg.DNSServers = envOr(env, "VM_DNS_SERVERS", cfg.Gateway+",1.1.1.1,8.8.8.8")
 
 	cfg.SSHUser = envOr(env, "VM_SSH_USER", "vm")
 	cfg.GuestUser = envOr(env, "VM_GUEST_USER", "vm")
 	cfg.GuestPassword = envOr(env, "VM_GUEST_PASSWORD", "vm")
 	cfg.RootPassword = envOr(env, "VM_ROOT_PASSWORD", "root")
 	cfg.SSHPublicKey = envOr(env, "VM_SSH_PUBLIC_KEY", filepath.Join(homeDir, ".ssh", "id_ed25519.pub"))
+	cfg.SSHPrivateKey = envOr(env, "VM_SSH_PRIVATE_KEY", "")
 	cfg.SSHKnownHostsFile = envOr(env, "VM_SSH_KNOWN_HOSTS_FILE", "")
 	cfg.Timezone = envOr(env, "VM_TIMEZONE", "Australia/Sydney")
 	if cfg.DefaultShell, err = choiceEnv(env, "VM_DEFAULT_SHELL", "fish", "fish", "zsh"); err != nil {
@@ -136,11 +140,13 @@ func LoadConfig() (Config, error) {
 	if cfg.SetDefaultShell, err = boolEnv(env, "VM_SET_DEFAULT_SHELL", true); err != nil {
 		return Config{}, err
 	}
+	cfg.BootstrapExtraCommands = envOr(env, "VM_BOOTSTRAP_EXTRA_COMMANDS", "")
 	cfg.VoidRepository = envOr(env, "VM_VOID_REPOSITORY", "https://repo-default.voidlinux.org")
 
 	cfg.ImageDir = envOr(env, "VM_IMAGE_DIR", filepath.Join(repoRoot, "images"))
-	cfg.BaseImage = envOr(env, "VM_BASE_IMAGE", filepath.Join(cfg.ImageDir, "void-aarch64-ROOTFS-20250202.tar.xz"))
-	cfg.BaseImageURL = envOr(env, "VM_BASE_IMAGE_URL", "https://repo-default.voidlinux.org/live/current/void-aarch64-ROOTFS-20250202.tar.xz")
+	cfg.BaseImage = envOr(env, "VM_BASE_IMAGE", "")
+	cfg.BaseImageURL = envOr(env, "VM_BASE_IMAGE_URL", "")
+	cfg.BuildKernelURL = envOr(env, "VM_BUILD_KERNEL_URL", "")
 	if cfg.GUI, err = boolEnv(env, "VM_GUI", true); err != nil {
 		return Config{}, err
 	}
@@ -191,7 +197,7 @@ Important environment variables:
   VM_DEFAULT_EDITOR=neovim
   VM_WINDOW_MANAGER=sway
   VM_VOID_REPOSITORY=%s
-  VM_STARSHIP_PRESET_URL=https://starship.rs/presets/toml/tokyo-night.toml
+  VM_STARSHIP_PRESET_URL=https://starship.rs/presets/toml/nerd-font-symbols.toml
   VM_BOOTSTRAP_BREW_PACKAGES="helix zellij zig opencode lazygit gitui"
   VM_BOOTSTRAP_CARGO_PACKAGES="fresh-editor:fresh"
   VM_GIT_USER_NAME="Your Name"

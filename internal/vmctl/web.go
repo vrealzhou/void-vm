@@ -52,6 +52,7 @@ func registerAPIRoutes(e *echo.Echo, cfg Config) {
 	e.POST("/api/start", handleStart(cfg))
 	e.POST("/api/stop", handleStop(cfg))
 	e.POST("/api/destroy", handleDestroy(cfg))
+	e.POST("/api/upgrade-kernel", handleUpgradeKernel(cfg))
 
 	// Tunnels
 	e.GET("/api/tunnels", handleListTunnels(cfg))
@@ -69,4 +70,10 @@ func registerAPIRoutes(e *echo.Echo, cfg Config) {
 
 	// VM Files
 	e.GET("/api/vm-files", handleVMFiles(cfg))
+
+	// Host Files
+	e.GET("/api/host-files", handleHostFiles())
+
+	// Progress
+	e.GET("/api/progress", handleProgress())
 }

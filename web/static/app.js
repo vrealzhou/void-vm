@@ -17,6 +17,7 @@ const els = {
     btnStart: document.getElementById('btn-start'),
     btnStop: document.getElementById('btn-stop'),
     btnDestroy: document.getElementById('btn-destroy'),
+    btnUpgradeKernel: document.getElementById('btn-upgrade-kernel'),
     btnAddSync: document.getElementById('btn-add-sync'),
     btnAddTunnel: document.getElementById('btn-add-tunnel'),
     actionText: document.getElementById('action-text'),
@@ -32,6 +33,7 @@ const els = {
     modalConfirm: document.getElementById('modal-confirm'),
     modalCancel: document.getElementById('modal-cancel'),
     filepickerOverlay: document.getElementById('filepicker-overlay'),
+    filepickerTitle: document.getElementById('filepicker-title'),
     filepickerBreadcrumb: document.getElementById('filepicker-breadcrumb'),
     filepickerList: document.getElementById('filepicker-list'),
     filepickerSelect: document.getElementById('filepicker-select'),
@@ -49,7 +51,7 @@ function showToast(message, type = 'success') {
 function setBusy(isBusy) {
     busy = isBusy;
     els.progress.classList.toggle('hidden', !isBusy);
-    [els.btnBootstrap, els.btnStart, els.btnStop, els.btnDestroy].forEach(btn => {
+    [els.btnBootstrap, els.btnStart, els.btnStop, els.btnDestroy, els.btnUpgradeKernel].forEach(btn => {
         btn.disabled = isBusy;
     });
 }
@@ -65,6 +67,7 @@ function updateButtons() {
     els.btnStop.disabled = !bootstrapDone || !running || busy;
     els.btnBootstrap.disabled = busy;
     els.btnDestroy.disabled = busy;
+    els.btnUpgradeKernel.disabled = !bootstrapDone || !running || busy;
 }
 
 async function refreshStatus() {
@@ -91,6 +94,7 @@ function formatOverview(status) {
         `IP: ${status.StaticIP}`,
         `SSH: ${status.SSHTarget}`,
     ];
+    if (status.KernelVersion) lines.push(`Kernel: ${status.KernelVersion}`);
     if (status.Running) lines.push(`PID: ${status.PID}`);
     return lines.join('\n');
 }
@@ -122,21 +126,25 @@ function hideModal() { els.modalOverlay.classList.add('hidden'); }
 let filePickerCallback = null;
 let filePickerCurrentPath = '';
 let filePickerRoot = '';
+let filePickerMode = 'vm';
 
-async function openFilePicker(root, callback) {
-    filePickerRoot = root || '/home/vm';
+async function openFilePicker(root, callback, mode) {
+    filePickerMode = mode || 'vm';
+    filePickerRoot = root || (filePickerMode === 'host' ? '' : '/home/vm');
     filePickerCurrentPath = filePickerRoot;
     filePickerCallback = callback;
+    els.filepickerTitle.textContent = filePickerMode === 'host' ? 'Select Host Path' : 'Select VM Path';
     els.filepickerOverlay.classList.remove('hidden');
     await loadFilePickerPath(filePickerCurrentPath);
 }
 
 async function loadFilePickerPath(path) {
     try {
-        const entries = await API.get(`/api/vm-files?path=${encodeURIComponent(path)}&root=${encodeURIComponent(filePickerRoot)}`);
-        if (entries.error) { showToast(entries.error, 'error'); return; }
-        filePickerCurrentPath = path;
-        renderFilePicker(entries);
+        const endpoint = filePickerMode === 'host' ? '/api/host-files' : '/api/vm-files';
+        const data = await API.get(`${endpoint}?path=${encodeURIComponent(path)}&root=${encodeURIComponent(filePickerRoot)}`);
+        if (data.error) { showToast(data.error, 'error'); return; }
+        filePickerCurrentPath = data.path || path;
+        renderFilePicker(data.entries || []);
     } catch (err) {
         showToast('Failed to load files: ' + err.message, 'error');
     }
@@ -179,18 +187,34 @@ els.filepickerCancel.onclick = () => els.filepickerOverlay.classList.add('hidden
 els.filepickerOverlay.querySelector('.modal-close').onclick = () => els.filepickerOverlay.classList.add('hidden');
 
 els.btnBootstrap.onclick = () => {
+    const c = (currentStatus && currentStatus.config) || {};
+    const sel = (id, val, opts) => opts.map(o => `<option${o === val ? ' selected' : ''}>${o}</option>`).join('');
     showModal('Bootstrap Preferences', `
-        <div class="form-group"><label>Default shell</label><select id="bootstrap-shell"><option>fish</option><option>zsh</option></select></div>
-        <div class="form-group"><label>Default editor</label><select id="bootstrap-editor"><option>neovim</option><option>helix</option></select></div>
-        <div class="form-group"><label>Window manager</label><select id="bootstrap-wm"><option>sway</option><option>xfce</option></select></div>
+        <div class="form-group"><label>Default shell</label><select id="bootstrap-shell">${sel('bootstrap-shell', c.shell || 'fish', ['fish', 'zsh'])}</select></div>
+        <div class="form-group"><label>Default editor</label><select id="bootstrap-editor">${sel('bootstrap-editor', c.editor || 'neovim', ['neovim', 'helix'])}</select></div>
+        <div class="form-group"><label>Window manager</label><select id="bootstrap-wm">${sel('bootstrap-wm', c.windowManager || 'sway', ['sway', 'xfce'])}</select></div>
+        <div class="form-group"><label>Memory (MiB)</label><input id="bootstrap-memory" type="number" placeholder="6144" value="${c.memoryMiB || 6144}"></div>
+        <div class="form-group"><label>Disk size</label><input id="bootstrap-disk" placeholder="100G" value="${c.diskSize || '100G'}"></div>
+        <div class="form-group"><label>Guest IP address</label><input id="bootstrap-ip" placeholder="192.168.64.10" value="${c.staticIP || '192.168.64.10'}"></div>
+        <div class="form-group"><label>Brew packages (space-separated)</label><input id="bootstrap-brew-packages" placeholder="helix zellij zig" value="${c.brewPackages || ''}"></div>
+        <div class="form-group"><label>Cargo packages (comma-separated, crate:binary)</label><input id="bootstrap-cargo-packages" placeholder="fresh-editor:fresh" value="${c.cargoPackages || ''}"></div>
     `, async () => {
         setBusy(true); setAction('Running bootstrap...');
         try {
-            await API.post('/api/bootstrap', {
+            const body = {
                 shell: document.getElementById('bootstrap-shell').value,
                 editor: document.getElementById('bootstrap-editor').value,
                 windowManager: document.getElementById('bootstrap-wm').value,
-            });
+                brewPackages: document.getElementById('bootstrap-brew-packages').value.trim(),
+                cargoPackages: document.getElementById('bootstrap-cargo-packages').value.trim(),
+            };
+            const mem = parseInt(document.getElementById('bootstrap-memory').value);
+            const disk = document.getElementById('bootstrap-disk').value.trim();
+            const ip = document.getElementById('bootstrap-ip').value.trim();
+            if (mem > 0) body.memoryMiB = mem;
+            if (disk) body.diskSize = disk;
+            if (ip) body.staticIP = ip;
+            await API.post('/api/bootstrap', body);
             showToast('Bootstrap started');
         } catch (err) {
             showToast('Bootstrap failed: ' + err.message, 'error');
@@ -338,7 +362,10 @@ window.removeSync = async (id) => {
 els.btnAddSync.onclick = () => {
     showModal('Add Sync Pair', `
         <div class="form-group"><label>Mode</label><select id="sync-mode"><option value="git">Git</option><option value="copy">Copy</option></select></div>
-        <div class="form-group"><label>Host directory</label><input id="sync-host" placeholder="Host directory path"></div>
+        <div class="form-group">
+            <label>Host directory</label>
+            <div style="display:flex;gap:8px;"><input id="sync-host" placeholder="Host directory path" style="flex:1;"><button class="btn btn-small" onclick="pickHostPath()">Browse</button></div>
+        </div>
         <div class="form-group">
             <label>VM directory</label>
             <div style="display:flex;gap:8px;"><input id="sync-vm" placeholder="VM directory path" style="flex:1;"><button class="btn btn-small" onclick="pickVMPath()">Browse</button></div>
@@ -369,10 +396,97 @@ els.btnAddSync.onclick = () => {
     };
 };
 
-window.pickVMPath = () => openFilePicker('/home/vm', (path) => { document.getElementById('sync-vm').value = path; });
-window.pickBareRepoPath = () => openFilePicker('/home/vm/repos', (path) => { document.getElementById('sync-bare').value = path; });
+window.pickVMPath = () => openFilePicker('/home/vm', (path) => { document.getElementById('sync-vm').value = path; }, 'vm');
+window.pickBareRepoPath = () => openFilePicker('/home/vm/repos', (path) => { document.getElementById('sync-bare').value = path; }, 'vm');
+window.pickHostPath = () => openFilePicker('', (path) => { document.getElementById('sync-host').value = path; }, 'host');
+
+els.btnUpgradeKernel.onclick = () => {
+    if (!confirm('Upgrade the VM kernel? This will restart the VM.')) return;
+    setBusy(true); setAction('Upgrading kernel...');
+    API.post('/api/upgrade-kernel')
+        .then(() => showToast('Kernel upgrade started'))
+        .catch(err => { showToast('Kernel upgrade failed: ' + err.message, 'error'); setAction('Kernel upgrade failed: ' + err.message); })
+        .finally(() => setBusy(false));
+};
 
 refreshStatus();
 loadTunnels();
 loadSync();
 refreshInterval = setInterval(() => { refreshStatus(); loadTunnels(); loadSync(); }, 5000);
+
+const themeToggle = document.getElementById('theme-toggle');
+const themeLabels = { system: 'System', light: 'Light', dark: 'Dark' };
+const themeOrder = ['system', 'light', 'dark'];
+
+function applyTheme(theme) {
+    localStorage.setItem('theme', theme);
+    themeToggle.textContent = themeLabels[theme];
+    if (theme === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+    } else {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+}
+
+const saved = localStorage.getItem('theme') || 'system';
+applyTheme(saved);
+
+themeToggle.onclick = () => {
+    const current = localStorage.getItem('theme') || 'system';
+    const next = themeOrder[(themeOrder.indexOf(current) + 1) % themeOrder.length];
+    applyTheme(next);
+};
+
+const progressLog = document.getElementById('progress-log');
+let lastProgressTime = 0;
+
+async function loadProgress() {
+    try {
+        const data = await API.get(`/api/progress?since=${lastProgressTime}`);
+        const entries = data.entries || [];
+        if (entries.length > 0) {
+            entries.forEach(e => {
+                const div = document.createElement('div');
+                const time = document.createElement('span');
+                time.className = 'log-time';
+                time.textContent = new Date(e.time).toLocaleTimeString();
+                div.appendChild(time);
+                div.appendChild(document.createTextNode(e.message));
+                progressLog.appendChild(div);
+            });
+            lastProgressTime = new Date(entries[entries.length - 1].time).getTime() + 1;
+            progressLog.scrollTop = progressLog.scrollHeight;
+        }
+    } catch (_) {}
+}
+
+loadProgress();
+setInterval(loadProgress, 2000);
+
+const leftPanel = document.getElementById('left-panel');
+const divider = document.getElementById('divider');
+const rightPanel = document.getElementById('right-panel');
+const savedWidth = localStorage.getItem('panel-width');
+if (savedWidth) leftPanel.style.width = savedWidth;
+
+let dragging = false;
+divider.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true;
+    divider.classList.add('active');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+});
+document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const newWidth = Math.max(200, Math.min(e.clientX, window.innerWidth - 200));
+    leftPanel.style.width = newWidth + 'px';
+});
+document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove('active');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    localStorage.setItem('panel-width', leftPanel.style.width);
+});

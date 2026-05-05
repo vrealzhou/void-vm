@@ -47,7 +47,10 @@ func handleVMFiles(cfg Config) echo.HandlerFunc {
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
-		return c.JSON(http.StatusOK, entries)
+		return c.JSON(http.StatusOK, map[string]any{
+			"path":    path,
+			"entries": entries,
+		})
 	}
 }
 

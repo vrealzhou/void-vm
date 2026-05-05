@@ -9,7 +9,7 @@ STATE_DIR="${TEST_ROOT}/state"
 KNOWN_HOSTS_FILE="${STATE_DIR}/known_hosts"
 E2E_BASE_IMAGE="${E2E_BASE_IMAGE:-}"
 E2E_SSH_PRIVATE_KEY="${E2E_SSH_PRIVATE_KEY:-${HOME}/.ssh/id_ed25519}"
-VM_USER="${E2E_VM_USER:-dev}"
+VM_USER="${E2E_VM_USER:-vm}"
 VM_IP="192.168.64.10"
 
 vmctl() {
@@ -45,7 +45,7 @@ mkdir -p "${STATE_DIR}"
 
 [[ -f "${E2E_SSH_PRIVATE_KEY}" ]] || { echo "missing private key: ${E2E_SSH_PRIVATE_KEY}" >&2; exit 1; }
 
-start_vm() {
+bootstrap_vm() {
   (
     export VM_NAME=e2e-vm
     export VM_STATE_DIR="${STATE_DIR}"
@@ -54,13 +54,15 @@ start_vm() {
     export VM_MEMORY_MIB=6144
     export VM_DISK_SIZE=24G
     export VM_SSH_USER="${VM_USER}"
+    export VM_GUEST_USER="${VM_USER}"
+    export VM_GUEST_PASSWORD="${VM_USER}"
     export VM_STATIC_IP="${VM_IP}"
     export VM_SSH_KNOWN_HOSTS_FILE="${KNOWN_HOSTS_FILE}"
     if [[ -n "${E2E_BASE_IMAGE}" ]]; then
       [[ -f "${E2E_BASE_IMAGE}" ]] || { echo "missing base image: ${E2E_BASE_IMAGE}" >&2; exit 1; }
       export VM_BASE_IMAGE="${E2E_BASE_IMAGE}"
     fi
-    vmctl start
+    vmctl bootstrap
   )
 }
 
@@ -75,7 +77,7 @@ wait_for_ssh() {
   return 1
 }
 
-start_vm
+bootstrap_vm
 wait_for_ssh
 
 [[ -f "${STATE_DIR}/bootstrap.done" ]] || {
@@ -135,6 +137,8 @@ VM_NAME=e2e-vm \
 VM_STATE_DIR="${STATE_DIR}" \
 VM_GUI=0 \
 VM_SSH_USER="${VM_USER}" \
+VM_GUEST_USER="${VM_USER}" \
+VM_GUEST_PASSWORD="${VM_USER}" \
 VM_STATIC_IP="${VM_IP}" \
 VM_SSH_KNOWN_HOSTS_FILE="${KNOWN_HOSTS_FILE}" \
 vmctl start

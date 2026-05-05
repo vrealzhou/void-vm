@@ -7,7 +7,7 @@ TARGET_HOME="${TARGET_HOME:-$(eval echo "~${TARGET_USER}")}"
 DEFAULT_SHELL="${DEFAULT_SHELL:-fish}"
 DEFAULT_EDITOR="${DEFAULT_EDITOR:-neovim}"
 WINDOW_MANAGER="${WINDOW_MANAGER:-sway}"
-STARSHIP_PRESET_URL="${STARSHIP_PRESET_URL:-https://starship.rs/presets/toml/tokyo-night.toml}"
+STARSHIP_PRESET_URL="${STARSHIP_PRESET_URL:-https://starship.rs/presets/toml/nerd-font-symbols.toml}"
 SET_DEFAULT_SHELL="${SET_DEFAULT_SHELL:-1}"
 HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/home/linuxbrew/.linuxbrew}"
 BOOTSTRAP_DNS_SERVERS="${BOOTSTRAP_DNS_SERVERS:-1.1.1.1 8.8.8.8}"
@@ -96,6 +96,8 @@ zig
 opencode
 lazygit
 gitui
+yazi
+go
 EOF
 }
 
@@ -391,8 +393,7 @@ write_fish_autostart() {
   cat >"${FISH_SESSION_AUTOSTART_SNIPPET}" <<'EOF'
 if status is-interactive
   if test -z "$WAYLAND_DISPLAY"; and test -z "$DISPLAY"
-    set current_tty (tty 2>/dev/null)
-    if test "$current_tty" = "/dev/tty1"
+    if string match -q /dev/tty1 (tty 2>/dev/null)
       exec /usr/local/bin/vmctl-session
     end
   end

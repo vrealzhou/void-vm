@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +18,8 @@ type VMStatus struct {
 	DiskPath      string
 	StaticIP      string
 	SSHTarget     string
-	BootstrapDone bool
+	BootstrapDone  bool
+	KernelVersion  string
 }
 
 type GuestMetricsSample struct {
@@ -46,6 +48,9 @@ func InspectVM(cfg Config) (VMStatus, error) {
 		StaticIP:      cfg.StaticIP,
 		SSHTarget:     fmt.Sprintf("%s@%s", cfg.SSHUser, cfg.StaticIP),
 		BootstrapDone: fileExists(cfg.BootstrapMarker),
+	}
+	if bootAssetsExist(cfg) {
+		status.KernelVersion = filepath.Base(cfg.KernelPath)
 	}
 
 	running, err := pidIsRunning(cfg.PIDFile)
