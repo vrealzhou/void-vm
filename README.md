@@ -1,17 +1,12 @@
 # Agent VM
 
-Use `vfkit` on Apple Silicon macOS to run a fixed-IP `arm64` Linux development VM.
-
-The project is intentionally scoped to one supported workflow:
+A single-command, reproducible `arm64` Void Linux development VM on Apple Silicon macOS using `vfkit`.
 
 - Distribution: `Void Linux aarch64 glibc`
 - Desktop: configurable, default `Sway`
-- Entry point: `go run ./cmd/agent-vm <command>`
-- Network model: fixed IP `192.168.64.10`
+- Network: fixed IP `192.168.64.10`, gateway `192.168.64.1`
 - Default user: `vm`
-- Default resources: `6 CPU / 6 GiB RAM / 100 GiB disk`
-
-This is not a general-purpose VM abstraction layer. The goal is narrower: build a fast, reproducible, scriptable personal dev VM that supports both SSH and GUI use.
+- Resources: `6 CPU / 6 GiB RAM / 100 GiB disk`
 
 ## Host Requirements
 
@@ -28,6 +23,7 @@ go
 ```
 
 Optional (fallback disk builder):
+
 ```bash
 podman
 ```
@@ -38,21 +34,25 @@ Quick check:
 command -v vfkit qemu-img curl ssh go
 ```
 
-## Quick Start
+## Install
 
 ```bash
-go run ./cmd/agent-vm start
+go install github.com/vrealzhou/agent-vm/cmd/agent-vm@latest
 ```
 
-On first boot, `agent-vm` downloads the Void rootfs tarball, builds a disk image, extracts the kernel/initramfs, boots the VM, and runs bootstrap automatically. Subsequent starts reuse the existing VM state.
-
-### Web UI
+Then run from anywhere:
 
 ```bash
-go run ./cmd/agent-vm          # open web UI at http://localhost:8080
+agent-vm start
+agent-vm ssh
+agent-vm status
 ```
 
-From the UI you can configure bootstrap preferences (shell, editor, window manager, brew/cargo packages, post-bootstrap hooks), start/stop/destroy the VM, manage sync pairs and SSH tunnels.
+Or run directly from the repo:
+
+```bash
+go run ./cmd/agent-vm <command>
+```
 
 ## Configuration
 
@@ -122,6 +122,22 @@ tunnels:
 
 Every key is optional — defaults apply for anything omitted.
 
+## Quick Start
+
+```bash
+agent-vm start
+```
+
+On first boot, `agent-vm` downloads the Void rootfs tarball, builds a disk image, extracts the kernel/initramfs, boots the VM, and runs bootstrap automatically. Subsequent starts reuse the existing VM state.
+
+### Web UI
+
+```bash
+agent-vm            # open web UI at http://localhost:8080
+```
+
+From the UI you can configure bootstrap preferences (shell, editor, window manager, brew/cargo packages, post-bootstrap hooks), start/stop/destroy the VM, manage sync pairs and SSH tunnels.
+
 ## Default Layout
 
 ```
@@ -149,15 +165,15 @@ Default login:
 ## CLI Commands
 
 ```bash
-go run ./cmd/agent-vm start       # create assets + boot VM
-go run ./cmd/agent-vm stop        # stop the VM
-go run ./cmd/agent-vm destroy     # stop + remove VM state
-go run ./cmd/agent-vm status      # VM state, PID, IP, disk path
-go run ./cmd/agent-vm ssh         # SSH into guest as user "vm"
-go run ./cmd/agent-vm ip          # print guest IP
-go run ./cmd/agent-vm bootstrap   # run bootstrap flow
-go run ./cmd/agent-vm sync        # manage sync pairs
-go run ./cmd/agent-vm tunnel      # manage SSH tunnels
+agent-vm start       # create assets + boot VM
+agent-vm stop        # stop the VM
+agent-vm destroy     # stop + remove VM state
+agent-vm status      # VM state, PID, IP, disk path
+agent-vm ssh         # SSH into guest as user "vm"
+agent-vm ip          # print guest IP
+agent-vm bootstrap   # run bootstrap flow
+agent-vm sync        # manage sync pairs
+agent-vm tunnel      # manage SSH tunnels
 ```
 
 ## Sync
@@ -165,13 +181,15 @@ go run ./cmd/agent-vm tunnel      # manage SSH tunnels
 File sync between host and VM — supports two modes:
 
 **copy** — rsync with backups:
+
 ```bash
-go run ./cmd/agent-vm sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode copy
+agent-vm sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode copy
 ```
 
 **git** — bare repo on VM, host pushes/pulls via `git push vm` / `git pull vm`:
+
 ```bash
-go run ./cmd/agent-vm sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode git
+agent-vm sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode git
 ```
 
 Sync pairs can also be configured in `vmctl.yaml` or via the web UI.
@@ -181,7 +199,7 @@ Sync pairs can also be configured in `vmctl.yaml` or via the web UI.
 SSH port forwarding between host and VM:
 
 ```bash
-go run ./cmd/agent-vm tunnel add --name webapp --type local --local-port 3000 --remote-port 3000
+agent-vm tunnel add --name webapp --type local --local-port 3000 --remote-port 3000
 ```
 
 Also configurable in `vmctl.yaml` under the `tunnels:` section.
@@ -213,7 +231,7 @@ Post-bootstrap hooks run after all steps complete. Add them under `bootstrap.hoo
 
 ```bash
 rm -rf ~/.config/agent-vm/void-dev
-go run ./cmd/agent-vm start
+agent-vm start
 ```
 
 ## Troubleshooting
