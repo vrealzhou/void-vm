@@ -167,7 +167,11 @@ func Bootstrap(cfg Config) error {
 		return fmt.Errorf("failed to generate bootstrap script: %w", err)
 	}
 
-	scriptPath := filepath.Join(cfg.StateDir, "guest-bootstrap.sh")
+	scriptsDir := filepath.Join(cfg.ConfigDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create scripts dir: %w", err)
+	}
+	scriptPath := filepath.Join(scriptsDir, "guest-bootstrap.sh")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		return fmt.Errorf("failed to write bootstrap script: %w", err)
 	}
