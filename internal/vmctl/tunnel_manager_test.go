@@ -71,7 +71,6 @@ func TestBuildSSHCommandRemoteForward(t *testing.T) {
 		t.Fatalf("expected command ssh, got %q", args[0])
 	}
 
-	// Check for -R local_port:localhost:local_port
 	wantForward := "-R"
 	foundForward := false
 	for i, arg := range args {
@@ -86,7 +85,6 @@ func TestBuildSSHCommandRemoteForward(t *testing.T) {
 		t.Fatalf("expected remote forward flag not found in %v", args)
 	}
 
-	// Should NOT have -L
 	for _, arg := range args {
 		if arg == "-L" {
 			t.Fatal("expected no -L flag for remote forward")
@@ -135,76 +133,13 @@ func TestTunnelPIDFile(t *testing.T) {
 }
 
 func TestIsTunnelRunningWithCurrentProcess(t *testing.T) {
-	// Use the current process PID as a known-running process
 	cfg := Config{StateDir: t.TempDir()}
 	pidFile := tunnelPIDFile(cfg, "test-tunnel")
 
 	if err := os.MkdirAll(filepath.Dir(pidFile), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(pidFile, []byte(string(rune(os.Getpid()))), 0o644); err != nil {
-		t.Fatal(err)
-	}
 
-	// Write actual PID as string
-	if err := os.WriteFile(pidFile, []byte(string(rune(os.Getpid()))), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Actually write it properly
-	pidStr := string(rune(os.Getpid()))
-	_ = pidStr
-	if err := os.WriteFile(pidFile, []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Write the real PID
-	f, err := os.Create(pidFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = f.WriteString(string(rune(os.Getpid())))
-	f.Close()
-
-	// Actually write it correctly
-	f, err = os.Create(pidFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = f.WriteString("not a number")
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
-
-	// Write actual numeric PID
-	if err := os.WriteFile(pidFile, []byte("not a number"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Actually do it right
-	f, err = os.Create(pidFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = f.Write([]byte("not a number"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
-
-	// Write real PID
-	if err := os.WriteFile(pidFile, []byte("not a number"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Use a simple approach
-	err = os.WriteFile(pidFile, []byte("not a number"), 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Actually write the real PID
 	pidBytes := make([]byte, 0)
 	pid := os.Getpid()
 	for pid > 0 {
@@ -235,7 +170,6 @@ func TestIsTunnelRunningWithDeadProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Write a PID that is extremely unlikely to exist (max PID is usually much lower)
 	if err := os.WriteFile(pidFile, []byte("999999"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -246,37 +180,36 @@ func TestIsTunnelRunningWithDeadProcess(t *testing.T) {
 }
 
 func TestStopAllTunnelsNoConfig(t *testing.T) {
+	dir := t.TempDir()
 	cfg := Config{
-		RepoRoot: t.TempDir(),
+		ConfigDir: dir,
+		StateDir:  t.TempDir(),
 	}
-	// No tunnel config file exists — should return nil (nothing to stop).
 	if err := StopAllTunnels(cfg); err != nil {
 		t.Fatalf("expected nil error when no config, got %v", err)
 	}
 }
 
 func TestStopAllTunnelsWithDeadTunnel(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VMCTL_CONFIG_DIR", dir)
+
 	cfg := Config{
-		RepoRoot: t.TempDir(),
-		StateDir: t.TempDir(),
+		ConfigDir: dir,
+		StateDir:  t.TempDir(),
 	}
 
-	// Create a tunnel config with one tunnel whose PID file references a dead process.
 	tc := TunnelConfig{
 		Version: 1,
 		Tunnels: []Tunnel{
 			{ID: "dead", Name: "Dead Tunnel", Enabled: true},
 		},
 	}
-	path := tunnelConfigPath(cfg)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := SaveTunnelConfig(path, tc); err != nil {
+	yamlPath := filepath.Join(dir, "vmctl.yaml")
+	if err := SaveTunnelConfig(yamlPath, tc); err != nil {
 		t.Fatal(err)
 	}
 
-	// Write a non-existent PID.
 	pidFile := tunnelPIDFile(cfg, "dead")
 	if err := os.MkdirAll(filepath.Dir(pidFile), 0o755); err != nil {
 		t.Fatal(err)
@@ -285,15 +218,16 @@ func TestStopAllTunnelsWithDeadTunnel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Should succeed because the tunnel is not actually running.
 	if err := StopAllTunnels(cfg); err != nil {
 		t.Fatalf("expected nil error for dead tunnel, got %v", err)
 	}
 }
 
 func TestStartAutoTunnelsNoConfig(t *testing.T) {
+	dir := t.TempDir()
 	cfg := Config{
-		RepoRoot: t.TempDir(),
+		ConfigDir: dir,
+		StateDir:  t.TempDir(),
 	}
 	if err := StartAutoTunnels(cfg); err != nil {
 		t.Fatalf("expected nil error when no config, got %v", err)
@@ -301,11 +235,14 @@ func TestStartAutoTunnelsNoConfig(t *testing.T) {
 }
 
 func TestStartAutoTunnelsSkipsNonAutoStart(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VMCTL_CONFIG_DIR", dir)
+
 	cfg := Config{
-		RepoRoot: t.TempDir(),
-		StateDir: t.TempDir(),
+		ConfigDir: dir,
+		StateDir:  t.TempDir(),
 		StaticIP: "192.168.64.10",
-		SSHUser:  "vm",
+		SSHUser: "vm",
 	}
 
 	tc := TunnelConfig{
@@ -315,16 +252,162 @@ func TestStartAutoTunnelsSkipsNonAutoStart(t *testing.T) {
 			{ID: "disabled", Name: "Disabled Tunnel", Enabled: false, AutoStart: true},
 		},
 	}
-	path := tunnelConfigPath(cfg)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := SaveTunnelConfig(path, tc); err != nil {
+	yamlPath := filepath.Join(dir, "vmctl.yaml")
+	if err := SaveTunnelConfig(yamlPath, tc); err != nil {
 		t.Fatal(err)
 	}
 
-	// Should succeed without starting anything.
 	if err := StartAutoTunnels(cfg); err != nil {
 		t.Fatalf("expected nil error, got %v", err)
+	}
+}
+
+func TestTunnelConfigPath(t *testing.T) {
+	cfg := Config{ConfigDir: "/custom/config/dir"}
+	got := tunnelConfigPath(cfg)
+	want := filepath.Join("/custom/config/dir", "vmctl.yaml")
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestSaveTunnelConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VMCTL_CONFIG_DIR", dir)
+
+	tunnel := Tunnel{
+		ID:        "test-tunnel",
+		Name:      "Test Tunnel",
+		Type:      TunnelTypeLocal,
+		LocalPort: 8080,
+		RemotePort: 80,
+		Enabled:   true,
+		AutoStart: true,
+	}
+	tc := TunnelConfig{Tunnels: []Tunnel{tunnel}}
+
+	yamlPath := filepath.Join(dir, "vmctl.yaml")
+	if err := SaveTunnelConfig(yamlPath, tc); err != nil {
+		t.Fatalf("SaveTunnelConfig failed: %v", err)
+	}
+
+	loaded, err := LoadTunnelConfig(yamlPath)
+	if err != nil {
+		t.Fatalf("LoadTunnelConfig failed: %v", err)
+	}
+	if len(loaded.Tunnels) != 1 {
+		t.Fatalf("expected 1 tunnel, got %d", len(loaded.Tunnels))
+	}
+	if loaded.Tunnels[0].ID != "test-tunnel" {
+		t.Fatalf("expected test-tunnel, got %q", loaded.Tunnels[0].ID)
+	}
+}
+
+func TestSaveSyncConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VMCTL_CONFIG_DIR", dir)
+
+	pair := SyncPair{
+		ID:       "test-pair",
+		Mode:     SyncModeCopy,
+		HostPath: "/host/test",
+		VMPath:   "/vm/test",
+	}
+	sc := SyncConfig{Pairs: []SyncPair{pair}}
+
+	yamlPath := filepath.Join(dir, "vmctl.yaml")
+	if err := SaveSyncConfig(yamlPath, sc); err != nil {
+		t.Fatalf("SaveSyncConfig failed: %v", err)
+	}
+
+	loaded, err := LoadSyncConfig(yamlPath)
+	if err != nil {
+		t.Fatalf("LoadSyncConfig failed: %v", err)
+	}
+	if len(loaded.Pairs) != 1 {
+		t.Fatalf("expected 1 pair, got %d", len(loaded.Pairs))
+	}
+	if loaded.Pairs[0].ID != "test-pair" {
+		t.Fatalf("expected test-pair, got %q", loaded.Pairs[0].ID)
+	}
+}
+
+func TestConfigRoundtripWithSyncAndTunnels(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VMCTL_CONFIG_DIR", dir)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	cfg.SyncPairs = []SyncPair{
+		{ID: "sp1", Mode: SyncModeCopy, HostPath: "/host/sp1", VMPath: "/vm/sp1"},
+		{ID: "sp2", Mode: SyncModeGit, HostPath: "/host/sp2", VMPath: "/vm/sp2"},
+	}
+	cfg.Tunnels = []Tunnel{
+		{ID: "t1", Name: "T1", Type: TunnelTypeLocal, LocalPort: 3000, RemotePort: 3000},
+		{ID: "t2", Name: "T2", Type: TunnelTypeRemote, LocalPort: 4000, RemotePort: 4000},
+	}
+
+	if err := SaveConfig(cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	loaded, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if len(loaded.SyncPairs) != 2 {
+		t.Fatalf("expected 2 sync pairs, got %d", len(loaded.SyncPairs))
+	}
+	if loaded.SyncPairs[0].ID != "sp1" {
+		t.Fatalf("expected sp1, got %q", loaded.SyncPairs[0].ID)
+	}
+	if loaded.SyncPairs[1].ID != "sp2" {
+		t.Fatalf("expected sp2, got %q", loaded.SyncPairs[1].ID)
+	}
+
+	if len(loaded.Tunnels) != 2 {
+		t.Fatalf("expected 2 tunnels, got %d", len(loaded.Tunnels))
+	}
+	if loaded.Tunnels[0].ID != "t1" {
+		t.Fatalf("expected t1, got %q", loaded.Tunnels[0].ID)
+	}
+	if loaded.Tunnels[1].ID != "t2" {
+		t.Fatalf("expected t2, got %q", loaded.Tunnels[1].ID)
+	}
+}
+
+func TestConfigSaveTunnelViaConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VMCTL_CONFIG_DIR", dir)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	cfg.Tunnels = []Tunnel{
+		{ID: "direct", Name: "Direct Tunnel", Type: TunnelTypeLocal, LocalPort: 9090, RemotePort: 9090, Enabled: true},
+	}
+
+	if err := SaveConfig(cfg); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+
+	loaded, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if len(loaded.Tunnels) != 1 {
+		t.Fatalf("expected 1 tunnel, got %d", len(loaded.Tunnels))
+	}
+	if loaded.Tunnels[0].ID != "direct" {
+		t.Fatalf("expected 'direct', got %q", loaded.Tunnels[0].ID)
+	}
+	if loaded.Tunnels[0].LocalPort != 9090 {
+		t.Fatalf("expected port 9090, got %d", loaded.Tunnels[0].LocalPort)
 	}
 }

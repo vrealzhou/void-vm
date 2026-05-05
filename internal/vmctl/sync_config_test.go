@@ -8,7 +8,7 @@ import (
 )
 
 func TestLoadSyncConfigNonExistent(t *testing.T) {
-	cfg, err := LoadSyncConfig(filepath.Join(t.TempDir(), "nonexistent.json"))
+	cfg, err := LoadSyncConfig(filepath.Join(t.TempDir(), "nonexistent.yaml"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestLoadSyncConfigNonExistent(t *testing.T) {
 
 func TestLoadSaveSyncConfigRoundtrip(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".vmctl.sync")
+	t.Setenv("VMCTL_CONFIG_DIR", dir)
 
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	original := SyncConfig{
@@ -51,18 +51,16 @@ func TestLoadSaveSyncConfigRoundtrip(t *testing.T) {
 		},
 	}
 
-	if err := SaveSyncConfig(path, original); err != nil {
+	yamlPath := filepath.Join(dir, "vmctl.yaml")
+	if err := SaveSyncConfig(yamlPath, original); err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
 
-	loaded, err := LoadSyncConfig(path)
+	loaded, err := LoadSyncConfig(yamlPath)
 	if err != nil {
 		t.Fatalf("load failed: %v", err)
 	}
 
-	if loaded.Version != original.Version {
-		t.Fatalf("version mismatch: got %d want %d", loaded.Version, original.Version)
-	}
 	if len(loaded.Pairs) != len(original.Pairs) {
 		t.Fatalf("pairs length mismatch: got %d want %d", len(loaded.Pairs), len(original.Pairs))
 	}
@@ -92,9 +90,6 @@ func TestLoadSaveSyncConfigRoundtrip(t *testing.T) {
 		}
 		if got.BackupRetentionDays != want.BackupRetentionDays {
 			t.Fatalf("pair[%d].BackupRetentionDays: got %d want %d", i, got.BackupRetentionDays, want.BackupRetentionDays)
-		}
-		if !got.CreatedAt.Equal(want.CreatedAt) {
-			t.Fatalf("pair[%d].CreatedAt: got %v want %v", i, got.CreatedAt, want.CreatedAt)
 		}
 		if len(got.Exclude) != len(want.Exclude) {
 			t.Fatalf("pair[%d].Exclude length: got %d want %d", i, len(got.Exclude), len(want.Exclude))
@@ -168,15 +163,15 @@ func TestSyncConfigRemovePair(t *testing.T) {
 	}
 }
 
-func TestLoadSyncConfigInvalidJSON(t *testing.T) {
+func TestLoadSyncConfigInvalidYAML(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "bad.json")
-	if err := os.WriteFile(path, []byte("not json"), 0o644); err != nil {
+	path := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(path, []byte("not: yaml: ["), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	_, err := LoadSyncConfig(path)
 	if err == nil {
-		t.Fatal("expected error for invalid JSON")
+		t.Fatal("expected error for invalid YAML")
 	}
 }

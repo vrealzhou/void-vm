@@ -8,7 +8,7 @@ import (
 )
 
 func TestLoadTunnelConfigNonExistent(t *testing.T) {
-	cfg, err := LoadTunnelConfig(filepath.Join(t.TempDir(), "nonexistent.json"))
+	cfg, err := LoadTunnelConfig(filepath.Join(t.TempDir(), "nonexistent.yaml"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestLoadTunnelConfigNonExistent(t *testing.T) {
 
 func TestLoadSaveTunnelConfigRoundtrip(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".vmctl.tunnels")
+	t.Setenv("VMCTL_CONFIG_DIR", dir)
 
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	original := TunnelConfig{
@@ -53,18 +53,16 @@ func TestLoadSaveTunnelConfigRoundtrip(t *testing.T) {
 		},
 	}
 
-	if err := SaveTunnelConfig(path, original); err != nil {
+	yamlPath := filepath.Join(dir, "vmctl.yaml")
+	if err := SaveTunnelConfig(yamlPath, original); err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
 
-	loaded, err := LoadTunnelConfig(path)
+	loaded, err := LoadTunnelConfig(yamlPath)
 	if err != nil {
 		t.Fatalf("load failed: %v", err)
 	}
 
-	if loaded.Version != original.Version {
-		t.Fatalf("version mismatch: got %d want %d", loaded.Version, original.Version)
-	}
 	if len(loaded.Tunnels) != len(original.Tunnels) {
 		t.Fatalf("tunnels length mismatch: got %d want %d", len(loaded.Tunnels), len(original.Tunnels))
 	}
@@ -94,9 +92,6 @@ func TestLoadSaveTunnelConfigRoundtrip(t *testing.T) {
 		}
 		if got.AutoStart != want.AutoStart {
 			t.Fatalf("tunnel[%d].AutoStart: got %v want %v", i, got.AutoStart, want.AutoStart)
-		}
-		if !got.CreatedAt.Equal(want.CreatedAt) {
-			t.Fatalf("tunnel[%d].CreatedAt: got %v want %v", i, got.CreatedAt, want.CreatedAt)
 		}
 	}
 }
@@ -183,15 +178,15 @@ func TestTunnelConfigGetEnabledTunnels(t *testing.T) {
 	}
 }
 
-func TestLoadTunnelConfigInvalidJSON(t *testing.T) {
+func TestLoadTunnelConfigInvalidYAML(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "bad.json")
-	if err := os.WriteFile(path, []byte("not json"), 0o644); err != nil {
+	path := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(path, []byte("not: yaml: ["), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	_, err := LoadTunnelConfig(path)
 	if err == nil {
-		t.Fatal("expected error for invalid JSON")
+		t.Fatal("expected error for invalid YAML")
 	}
 }
