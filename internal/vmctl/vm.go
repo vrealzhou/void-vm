@@ -63,10 +63,23 @@ func Start(cfg Config) error {
 
 	logf("VM started")
 	if voidBootstrapCandidate && !fileExists(cfg.BootstrapMarker) {
+		logf("waiting for root SSH to fix guest configuration...")
+		if err := waitForSSH(cfg, "root", 3*time.Minute); err != nil {
+			return err
+		}
+		if err := fixGuestConfig(cfg); err != nil {
+			logf("fix guest config: %v", err)
+		}
 		logf("waiting for SSH so first-boot bootstrap can finish")
 		addProgress("waiting for VM SSH to become available...")
 		if err := waitForSSH(cfg, cfg.SSHUser, 5*time.Minute); err != nil {
-			return err
+			addProgress("guest SSH for %s not ready, retrying root repair...", cfg.SSHUser)
+			if repairErr := fixGuestConfig(cfg); repairErr != nil {
+				logf("retry fix guest config: %v", repairErr)
+			}
+			if retryErr := waitForSSH(cfg, cfg.SSHUser, 90*time.Second); retryErr != nil {
+				return retryErr
+			}
 		}
 		addProgress("SSH available, running bootstrap...")
 		if err := Bootstrap(cfg); err != nil {
@@ -207,7 +220,13 @@ func BootstrapSetup(cfg Config) error {
 
 	addProgress("waiting for SSH to run bootstrap...")
 	if err := waitForSSH(cfg, cfg.SSHUser, 5*time.Minute); err != nil {
-		return err
+		addProgress("guest SSH for %s not ready, attempting root-side repair...", cfg.SSHUser)
+		if repairErr := fixGuestConfig(cfg); repairErr != nil {
+			logf("fix guest config: %v", repairErr)
+		}
+		if retryErr := waitForSSH(cfg, cfg.SSHUser, 90*time.Second); retryErr != nil {
+			return retryErr
+		}
 	}
 	addProgress("running bootstrap script...")
 	if err := Bootstrap(cfg); err != nil {
@@ -1017,4 +1036,73 @@ func ClipboardOut(cfg Config) error {
 
 func waylandClipboardShell(command string) string {
 	return "sh -lc " + shellQuote(`uid="$(id -u)"; runtime_dir="${HOME}/.local/run"; [ -d "${runtime_dir}" ] || runtime_dir="/run/user/${uid}"; export XDG_RUNTIME_DIR="${runtime_dir}"; sock="$(find "${XDG_RUNTIME_DIR}" -maxdepth 1 -type s -name 'wayland-*' | head -n 1)"; [ -n "${sock}" ] || { echo "no Wayland socket found; log into Sway first" >&2; exit 1; }; export WAYLAND_DISPLAY="$(basename "${sock}")"; `+command)
+}
+
+func fixGuestConfig(cfg Config) error {
+	pubKey, err := os.ReadFile(cfg.SSHPublicKey)
+	if err != nil {
+		return err
+	}
+	key := shellQuote(strings.TrimSpace(string(pubKey)))
+	guest := shellQuote(cfg.GuestUser)
+	script := fmt.Sprintf(`set -e
+guest=%s
+pubkey=%s
+
+mkdir -p /home/"${guest}"/.ssh /home/"${guest}"/.config/fish/conf.d
+printf '%%s\n' "${pubkey}" > /home/"${guest}"/.ssh/authorized_keys
+chmod 700 /home/"${guest}"/.ssh
+chmod 600 /home/"${guest}"/.ssh/authorized_keys
+
+cat > /home/"${guest}"/.bash_profile <<'EOF'
+export XDG_RUNTIME_DIR="${HOME}/.local/run"
+mkdir -p "${XDG_RUNTIME_DIR}"
+chmod 700 "${XDG_RUNTIME_DIR}"
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ] && [ "$(tty 2>/dev/null)" = "/dev/tty1" ]; then
+  exec /usr/local/bin/vmctl-session
+fi
+EOF
+
+cat > /home/"${guest}"/.zprofile <<'EOF'
+export XDG_RUNTIME_DIR="${HOME}/.local/run"
+mkdir -p "${XDG_RUNTIME_DIR}"
+chmod 700 "${XDG_RUNTIME_DIR}"
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ] && [ "$(tty 2>/dev/null)" = "/dev/tty1" ]; then
+  exec /usr/local/bin/vmctl-session
+fi
+EOF
+
+cat > /home/"${guest}"/.config/fish/conf.d/vmctl-session.fish <<'EOF'
+if status is-interactive
+  if test -z "$WAYLAND_DISPLAY"; and test -z "$DISPLAY"
+    if string match -q /dev/tty1 (tty 2>/dev/null)
+      exec /usr/local/bin/vmctl-session
+    end
+  end
+end
+EOF
+
+chown -R "${guest}:${guest}" /home/"${guest}" 2>/dev/null || true
+passwd -d "${guest}" >/dev/null 2>&1 || true
+usermod -U "${guest}" >/dev/null 2>&1 || true
+grep -q '^PerSourcePenalties no$' /etc/ssh/sshd_config.d/99-vmctl.conf || printf '\nPerSourcePenalties no\n' >> /etc/ssh/sshd_config.d/99-vmctl.conf
+sv restart sshd >/dev/null 2>&1 || true
+
+test -s /home/"${guest}"/.ssh/authorized_keys
+test -s /home/"${guest}"/.bash_profile
+test -s /home/"${guest}"/.config/fish/conf.d/vmctl-session.fish
+echo DONE
+`, guest, key)
+
+	cmd := exec.Command("ssh", append(sshArgsForUser(cfg, "root"), "sh -s")...)
+	cmd.Stdin = strings.NewReader(script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("fixGuestConfig: %w\n%s", err, string(out))
+	}
+	if !strings.Contains(string(out), "DONE") {
+		return fmt.Errorf("fixGuestConfig incomplete:\n%s", string(out))
+	}
+	logf("guest configuration repaired")
+	return nil
 }

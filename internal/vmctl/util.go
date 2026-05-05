@@ -52,7 +52,20 @@ func pidIsRunning(pidFile string) (bool, error) {
 	if err := proc.Signal(syscall.Signal(0)); err != nil {
 		return false, nil
 	}
+	if state, err := processState(pid); err == nil {
+		if strings.Contains(state, "Z") {
+			return false, nil
+		}
+	}
 	return true, nil
+}
+
+func processState(pid int) (string, error) {
+	out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func runCommand(name string, args ...string) error {
@@ -514,7 +527,7 @@ func waitForSSH(cfg Config, user string, timeout time.Duration) error {
 		if attempt%5 == 1 {
 			addProgress("waiting for SSH on %s@%s...", user, cfg.StaticIP)
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 	return fmt.Errorf("timed out waiting for SSH on %s@%s", user, cfg.StaticIP)
 }

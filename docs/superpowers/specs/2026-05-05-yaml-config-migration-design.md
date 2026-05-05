@@ -64,7 +64,6 @@ guest:
   default_shell: fish
   default_editor: neovim
   window_manager: sway
-  starship_preset_url: "https://starship.rs/presets/toml/tokyo-night.toml"
 
 bootstrap:
   brew_packages:
@@ -128,7 +127,6 @@ tunnels:
 | guest | default_shell | `fish` |
 | guest | default_editor | `neovim` |
 | guest | window_manager | `sway` |
-| guest | starship_preset_url | `"https://starship.rs/presets/toml/tokyo-night.toml"` |
 | bootstrap | brew_packages | `[]` |
 | bootstrap | cargo_packages | `[]` |
 | bootstrap | hooks | `[]` |
@@ -145,6 +143,7 @@ tunnels:
 ### 3.3 Post-Bootstrap Hooks
 
 - **hooks**: list of inline shell command strings. Appended to the end of the generated guest bootstrap script, after the main `main()` function. Each hook is executed only if all preceding bootstrap steps succeeded. Hooks run as the target user inside the guest.
+- Hooks execute only once, as part of bootstrap. They do not run on subsequent VM restarts. To re-run hooks, run `vmctl bootstrap`.
 
 ### 3.4 Sync Entries
 
