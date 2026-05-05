@@ -1,9 +1,7 @@
 package vmctl
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 )
 
@@ -15,15 +13,15 @@ const (
 )
 
 type Tunnel struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Type       TunnelType `json:"type"`
-	LocalPort  int        `json:"local_port"`
-	RemoteHost string     `json:"remote_host,omitempty"` // Target host inside VM (usually "localhost")
-	RemotePort int        `json:"remote_port"`
-	Enabled    bool       `json:"enabled"`
-	AutoStart  bool       `json:"auto_start"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID         string     `json:"id" yaml:"id"`
+	Name       string     `json:"name" yaml:"name"`
+	Type       TunnelType `json:"type" yaml:"type"`
+	LocalPort  int        `json:"local_port" yaml:"local_port"`
+	RemoteHost string     `json:"remote_host,omitempty" yaml:"remote_host,omitempty"`
+	RemotePort int        `json:"remote_port" yaml:"remote_port"`
+	Enabled    bool       `json:"enabled" yaml:"enabled"`
+	AutoStart  bool       `json:"auto_start" yaml:"auto_start"`
+	CreatedAt  time.Time  `json:"created_at" yaml:"-"`
 }
 
 type TunnelConfig struct {
@@ -32,27 +30,20 @@ type TunnelConfig struct {
 }
 
 func LoadTunnelConfig(path string) (TunnelConfig, error) {
-	data, err := os.ReadFile(path)
+	ycfg, err := loadVMConfigFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return TunnelConfig{}, nil
-		}
 		return TunnelConfig{}, err
 	}
-
-	var cfg TunnelConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return TunnelConfig{}, err
-	}
-	return cfg, nil
+	return TunnelConfig{Tunnels: ycfg.Tunnels}, nil
 }
 
-func SaveTunnelConfig(path string, cfg TunnelConfig) error {
-	data, err := json.MarshalIndent(cfg, "", "  ")
+func SaveTunnelConfig(path string, tcfg TunnelConfig) error {
+	cfg, err := LoadConfig()
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	cfg.Tunnels = tcfg.Tunnels
+	return SaveConfig(cfg)
 }
 
 func (c *TunnelConfig) GetTunnel(id string) (Tunnel, bool) {

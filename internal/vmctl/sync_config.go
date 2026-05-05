@@ -1,9 +1,7 @@
 package vmctl
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 )
 
@@ -23,16 +21,16 @@ const (
 )
 
 type SyncPair struct {
-	ID                  string        `json:"id"`
-	Mode                SyncMode      `json:"mode"`
-	HostPath            string        `json:"host_path"`
-	VMPath              string        `json:"vm_path"`
-	BareRepoPath        string        `json:"bare_repo_path,omitempty"`
-	Direction           SyncDirection `json:"direction,omitempty"`
-	Exclude             []string      `json:"exclude,omitempty"`
-	ExcludeFrom         string        `json:"exclude_from,omitempty"`
-	BackupRetentionDays int           `json:"backup_retention_days,omitempty"`
-	CreatedAt           time.Time     `json:"created_at"`
+	ID                  string        `json:"id" yaml:"id"`
+	Mode                SyncMode      `json:"mode" yaml:"mode"`
+	HostPath            string        `json:"host_path" yaml:"host_path"`
+	VMPath              string        `json:"vm_path" yaml:"guest_path"`
+	BareRepoPath        string        `json:"bare_repo_path,omitempty" yaml:"bare_repo_path,omitempty"`
+	Direction           SyncDirection `json:"direction,omitempty" yaml:"direction,omitempty"`
+	Exclude             []string      `json:"exclude,omitempty" yaml:"exclude,omitempty"`
+	ExcludeFrom         string        `json:"exclude_from,omitempty" yaml:"exclude_from,omitempty"`
+	BackupRetentionDays int           `json:"backup_retention_days,omitempty" yaml:"backup_retention_days,omitempty"`
+	CreatedAt           time.Time     `json:"created_at" yaml:"-"`
 }
 
 type SyncConfig struct {
@@ -41,27 +39,20 @@ type SyncConfig struct {
 }
 
 func LoadSyncConfig(path string) (SyncConfig, error) {
-	data, err := os.ReadFile(path)
+	ycfg, err := loadVMConfigFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return SyncConfig{}, nil
-		}
 		return SyncConfig{}, err
 	}
-
-	var cfg SyncConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return SyncConfig{}, err
-	}
-	return cfg, nil
+	return SyncConfig{Pairs: ycfg.Sync}, nil
 }
 
-func SaveSyncConfig(path string, cfg SyncConfig) error {
-	data, err := json.MarshalIndent(cfg, "", "  ")
+func SaveSyncConfig(path string, scfg SyncConfig) error {
+	cfg, err := LoadConfig()
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	cfg.SyncPairs = scfg.Pairs
+	return SaveConfig(cfg)
 }
 
 func (c *SyncConfig) GetPair(id string) (SyncPair, bool) {

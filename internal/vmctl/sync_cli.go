@@ -10,7 +10,7 @@ import (
 )
 
 func syncConfigPath(cfg Config) string {
-	return filepath.Join(cfg.RepoRoot, ".vmctl.sync")
+	return filepath.Join(cfg.ConfigDir, "vmctl.yaml")
 }
 
 func syncBackupsDir(cfg Config) string {

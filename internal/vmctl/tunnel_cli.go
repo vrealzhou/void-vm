@@ -9,7 +9,7 @@ import (
 )
 
 func tunnelConfigPath(cfg Config) string {
-	return filepath.Join(cfg.RepoRoot, ".vmctl.tunnels")
+	return filepath.Join(cfg.ConfigDir, "vmctl.yaml")
 }
 
 func newTunnelCommand(cfg Config) *cobra.Command {
