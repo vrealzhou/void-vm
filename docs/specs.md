@@ -1,19 +1,19 @@
 # vfkit Linux Dev VM Spec
 
-Updated: 2026-04-18
+Updated: 2026-05-05
 
 ## 1. Goal
 
 Provide a single-command, reproducible `arm64` Linux development VM on Apple Silicon macOS using `vfkit`.
 
-The project now maintains exactly one default path:
-
 - Distribution: `Void Linux aarch64 glibc`
-- Desktop: `Sway`
+- Desktop: `Sway` (configurable)
 - Fixed IP: `192.168.64.10`
-- SSH target: `ssh dev@192.168.64.10`
+- SSH target: `ssh vm@192.168.64.10`
+- Default user: `vm`
 - Default resources: `6 CPU / 6 GiB RAM / 100 GiB disk`
 - Entry point: `go run ./cmd/vmctl start`
+- Config: `~/.config/agent-vm/vmctl.yaml` (YAML)
 
 Expected outcome:
 
@@ -30,308 +30,213 @@ The project supports only:
 1. The official Void `ROOTFS tarball`
 2. Existing disk images: `.img`, `.img.xz`, `.raw`, `.raw.xz`, `.qcow2`
 
-The default implementation is:
+The default implementation:
 
 - download the official `ROOTFS`
-- build the disk offline on the host
+- build the disk offline on the host via vfkit (fallback: podman)
 - extract `vmlinuz` and `initramfs`
 - boot with `vfkit --kernel/--initrd`
 
-### 2.2 Explicitly Unsupported Paths
+### 2.2 Unsupported Paths
 
-These paths are intentionally not maintained:
-
-- installer ISO
-- cloud-init
-- interactive installers
+- installer ISO, cloud-init, interactive installers
 - board-firmware-oriented ARM images
 
-Reason:
+## 3. Configuration
 
-- they increase code and maintenance cost
-- they do not improve the current default workflow
-- this project is not trying to be a generic VM installer
+### 3.1 Config File
 
-## 3. Boot And System Behavior
+All configuration lives in `~/.config/agent-vm/vmctl.yaml`. Override directory with `VMCTL_CONFIG_DIR`.
 
-### 3.1 First Boot
+The YAML schema is defined in `internal/vmctl/yaml_config.go`. Every key is optional — defaults apply for anything omitted.
 
-Running:
+```yaml
+vm:
+  name: void-dev
+  cpus: 6
+  memory_mib: 6144
+  disk_size: "100G"
+  gui: true
+  width: 1920
+  height: 1200
 
-```bash
-go run ./cmd/vmctl start
+network:
+  static_ip: "192.168.64.10"
+  gateway: "192.168.64.1"
+  cidr: 24
+  dns_servers: ["1.1.1.1", "8.8.8.8"]
+  mac: "52:54:00:64:00:10"
+
+user:
+  name: vm
+  password: dev
+  root_password: root
+  ssh_public_key: ""          # blank = auto-detect ~/.ssh/id_ed25519.pub
+
+guest:
+  timezone: Australia/Sydney
+  default_shell: fish
+  default_editor: neovim
+  window_manager: sway
+
+bootstrap:
+  brew_packages:
+    - helix
+    - zellij
+    - zig
+    - opencode
+    - lazygit
+    - gitui
+  cargo_packages:
+    - crate: fresh-editor
+      command: fresh
+  hooks:
+    - "echo bootstrap complete"
+
+git:
+  user_name: ""
+  user_email: ""
+
+sync:
+  - name: myproject
+    host_path: /Users/me/projects/myproject
+    target_path: /home/vm/myproject
+    mode: copy
+    direction: host-to-vm
+    exclude: [node_modules, .git]
+
+tunnels:
+  - name: webapp
+    type: local
+    local_port: 3000
+    remote_port: 3000
+    enabled: true
+    auto_start: true
 ```
 
-must automatically:
+### 3.2 Directory Layout
 
-1. download the official Void rootfs
-2. build a raw disk
+```
+~/.config/agent-vm/
+├── vmctl.yaml
+├── scripts/
+│   └── guest-bootstrap.sh   # generated at bootstrap time
+├── images/                  # base Void rootfs tarballs
+└── void-dev/                # runtime state
+    ├── disk.img
+    ├── vmlinuz
+    ├── initramfs.img
+    ├── bootstrap.done
+    ├── vfkit.log / serial.log / vfkit.pid
+```
+
+## 4. Bootstrap
+
+### 4.1 Bootstrap Flow
+
+Bootstrap runs automatically on first boot. It is a shell script generated from `internal/vmctl/bootstrap_script.go` and written to `~/.config/agent-vm/scripts/guest-bootstrap.sh` at bootstrap time.
+
+Bootstrap completion is tracked by a `bootstrap.done` marker. Subsequent VM starts skip bootstrap.
+
+### 4.2 Bootstrap Packages
+
+- **brew_packages**: YAML list of Homebrew formula names. Each installed via `brew install`.
+- **cargo_packages**: YAML list of objects with `crate` (Cargo crate name) and `command` (executable checked before install). If `command` is omitted, defaults to `crate`.
+
+### 4.3 Post-Bootstrap Hooks
+
+A list of inline shell commands under `bootstrap.hooks`. Execute once after all bootstrap steps succeed, as the target user inside the guest. They do not run on subsequent VM restarts.
+
+## 5. Boot And System Behavior
+
+### 5.1 First Boot
+
+Running `go run ./cmd/vmctl start` must automatically:
+
+1. download the official Void rootfs into `~/.config/agent-vm/images/`
+2. build a raw disk via vfkit (or podman fallback)
 3. write users, networking, SSH, GUI, and system config offline
 4. extract `vmlinuz` and `initramfs`
 5. start the VM
 6. wait for SSH and run bootstrap once
 
-### 3.2 Later Boots
+### 5.2 Later Boots
 
 If the disk and boot assets already exist:
 
 - boot directly into the existing VM
 - do not rerun bootstrap
 
-Bootstrap completion is tracked by a `bootstrap.done` marker.
+## 6. Users, Login, And GUI
 
-## 4. Users, Login, And GUI
+### 6.1 Default Accounts
 
-### 4.1 Default Accounts
+- User: `vm` / password: `dev`
+- Root: `root` / password: `root`
+- SSH key: auto-detected from `~/.ssh/id_ed25519.pub`; override via `user.ssh_public_key` in YAML
 
-- Development user: `dev`
-- Root user: `root`
-- Default local passwords:
-  - `dev / dev`
-  - `root / root`
-
-### 4.2 SSH
-
-Requirements:
-
-- reuse the host SSH public key by default
-- inject the key into both `dev` and `root`
-- allow:
+### 6.2 SSH
 
 ```bash
-ssh dev@192.168.64.10
+ssh vm@192.168.64.10
 ```
 
-### 4.3 GUI Session
+### 6.3 GUI Session
 
-Current GUI model:
+- `tty1 autologin -> vm -> sway` (or configured WM)
+- Boot directly into the user desktop session without a display manager
+- `gui: false` in YAML boots headless (no display window, no keyboard/mouse/GPU)
 
-- `tty1 autologin -> dev -> sway`
-
-Requirements:
-
-- boot directly into the `dev` `sway` session
-- do not depend on a standalone display manager
-- keep GUI and interactive SSH on the same `XDG_RUNTIME_DIR`
-
-## 5. Networking
-
-Default network model:
+## 7. Networking
 
 - `vfkit` NAT
-- guest fixed IP: `192.168.64.10/24`
-- default gateway: `192.168.64.1`
+- Guest fixed IP: `192.168.64.10/24`
+- Default gateway: `192.168.64.1`
+- Fixed IP binds to virtual NIC MAC address
 
-Access model:
+## 8. Sync
 
-- host to guest:
-  - `ssh dev@192.168.64.10`
-  - `http://192.168.64.10:<port>`
-- guest to host:
-  - `http://192.168.64.1:<port>`
+File sync between host and VM, configured in `vmctl.yaml` under `sync:` or via CLI/web UI.
 
-The fixed IP configuration must bind to the virtual NIC MAC address rather than interface name.
+**copy** mode: rsync with configurable backups.
+**git** mode: creates a bare repo on the VM, adds a `vm` remote on the host. Host pushes/pulls via `git push vm` / `git pull vm`. The VM target directory is cloned from the bare repo.
 
-## 6. Guest Software Set
+## 9. Tunnels
 
-### 6.1 Base System
+SSH port forwarding managed under `tunnels:` in `vmctl.yaml`. Supports local and remote forwarding with auto-start on VM boot.
 
-- `linux6.12`
-- `dracut`
-- `NetworkManager`
-- `dbus`
-- `openssh`
-- `curl`
-- `wget`
-- `git`
-- `sudo`
-- `chrony`
+## 10. Web UI
 
-### 6.2 GUI And Desktop
+Running `go run ./cmd/vmctl` without a subcommand starts the web UI on port 8080 (`VM_MANAGER_PORT`).
 
-- `sway`
-- `seatd`
-- `ghostty`
-- `wofi`
-- `mako`
-- `grim`
-- `slurp`
-- `wl-clipboard`
-- `xdg-desktop-portal-wlr`
-- `mesa`
-- `mesa-dri`
+The UI provides:
+- Bootstrap configuration (shell, editor, WM, packages, hooks, git identity)
+- VM start/stop/destroy with progress streaming
+- Guest CPU/memory metrics
+- Sync pair management
+- Tunnel management
 
-### 6.3 Browsers
+## 11. Guest Software Set
 
-- `Chromium`
-- `Zen Browser`
+### 11.1 Base System
 
-Constraints:
+- `linux6.12`, `dracut`, `NetworkManager`, `dbus`, `openssh`, `curl`, `wget`, `git`, `sudo`, `chrony`
 
-- `Chromium` should default to an `Xwayland` wrapper
-- `Zen Browser` should default to native `Wayland`
+### 11.2 GUI And Desktop
 
-### 6.4 Input Method And Fonts
+- `sway` (or `xfce`), `seatd`, `ghostty`, `wofi`, `mako`, `grim`, `slurp`, `wl-clipboard`, `xdg-desktop-portal-wlr`, `mesa`, `mesa-dri`
 
-- `fcitx5`
-- `fcitx5-chinese-addons`
-- `fcitx5-configtool`
-- `fcitx5-gtk+2`
-- `fcitx5-gtk+3`
-- `fcitx5-gtk4`
-- `fcitx5-qt5`
-- `fcitx5-qt6`
-- `noto-fonts-cjk`
-- `noto-fonts-emoji`
+### 11.3 Development Environment
 
-Default behavior:
+- `fish` or `zsh`, `starship`, `neovim` or `helix`, `rustup`, Homebrew for Linux, `zellij`, `zig`, `fnm`, `opencode`, `lazygit`, `gitui`, cargo packages
 
-- profile preloads `keyboard-us + pinyin`
-- left `Shift` toggles the IME
-- `Caps Lock` is a fallback toggle
-- `swaybar` shows the current IME state
-
-### 6.5 Development Environment
-
-- `fish`
-- `zsh`
-- `starship`
-- `neovim`
-- `rustup`
-- `Homebrew for Linux`
-- `helix`
-- `zellij`
-- `zig`
-- `fnm`
-- `opencode`
-- `lazygit`
-- `gitui`
-- `fresh-editor`
-
-Constraints:
-
-- `helix`, `zellij`, `zig`, `opencode`, `lazygit`, and `gitui` should default to Linux Homebrew
-- `fresh-editor` should install through Cargo
-- Cargo packages must support `crate:command` validation
-- if the command already exists, bootstrap must skip reinstalling it
-
-## 7. Shell, Git, And Time
-
-### 7.1 Shell, Editor, And Prompt
-
-Requirements:
-
-- default shell: `fish` or `zsh`
-- default editor: `neovim` or `helix`
-- default prompt theme: `Tokyo Night`
-- Starship config path: `~/.config/starship.toml`
-- Fish init line: `starship init fish | source`
-- Zsh init line: `eval "$(starship init zsh)"`
-- default preset source: `https://starship.rs/presets/toml/tokyo-night.toml`
-- true-color shell support enabled
-
-### 7.2 Node.js
-
-Requirements:
-
-- install `fnm` via Linux Homebrew
-- enable `fnm` in the configured shell
-- install the latest LTS Node.js release through `fnm`
-- prefer `fnm`-managed Node.js over a Homebrew-managed `node`
-
-### 7.3 Git
-
-Bootstrap must initialize `~/.gitconfig` with at least:
-
-- `core.editor = nvim`
-- `init.defaultBranch = main`
-- `push.autoSetupRemote = true`
-- `rebase.autoStash = true`
-- `merge.conflictstyle = zdiff3`
-
-It must also support:
-
-- `VM_GIT_USER_NAME`
-- `VM_GIT_USER_EMAIL`
-
-### 7.4 Time
-
-Requirements:
-
-- default timezone: `Australia/Sydney`
-- automatic time sync enabled
-- current implementation uses `chronyd`
-
-## 8. Clipboard
-
-The goal is not seamless system-level clipboard sync. The goal is stable helper-based sharing.
-
-Supported commands:
-
-- `vmctl clip-in`
-- `vmctl clip-out`
-
-Requirements:
-
-- the guest is already in `Sway`
-- the current Wayland session is available
-
-Explicitly not promised:
-
-- host/guest system-level seamless sync
-- any solution that depends on `SPICE` or `spice-vdagent`
-
-## 9. Customization Model
-
-All common overrides should be controlled through a repo-root `.vmctl.env`.
-
-Typical override groups:
-
-- resources: `VM_CPUS`, `VM_MEMORY_MIB`, `VM_DISK_SIZE`
-- networking: `VM_STATIC_IP`, `VM_GATEWAY`, `VM_DNS_SERVERS`, `VM_MAC`
-- accounts: `VM_GUEST_USER`, `VM_GUEST_PASSWORD`, `VM_ROOT_PASSWORD`
-- SSH: `VM_SSH_PUBLIC_KEY`, `VM_SSH_KNOWN_HOSTS_FILE`
-- image source: `VM_BASE_IMAGE`, `VM_BASE_IMAGE_URL`
-- shell/editor/window manager: `VM_DEFAULT_SHELL`, `VM_DEFAULT_EDITOR`, `VM_WINDOW_MANAGER`
-- display: `VM_WIDTH`, `VM_HEIGHT`
-- bootstrap packages: `VM_BOOTSTRAP_BREW_PACKAGES`, `VM_BOOTSTRAP_CARGO_PACKAGES`
-- prompt preset: `VM_STARSHIP_PRESET_URL`
-- git identity: `VM_GIT_USER_NAME`, `VM_GIT_USER_EMAIL`
-
-GUI requirements:
-
-- `vmctl` with no subcommand should open a Fyne control panel
-- the main GUI should expose exactly four primary actions: `bootstrap`, `start`, `stop`, and `destroy`
-- shell/editor/window manager preferences should be collected from the `bootstrap` popup, not shown as persistent controls on the main screen
-- `start` and `stop` should stay disabled until bootstrap has completed
-- `destroy` should warn before removing generated VM state
-- the GUI should show whether the VM is running
-- the GUI should sample guest CPU and memory usage over SSH when available
-
-## 10. Acceptance Criteria
-
-The current solution is considered valid if all of the following hold:
+## 12. Acceptance Criteria
 
 1. `go run ./cmd/vmctl start` completes download, disk build, and boot
-2. the GUI automatically enters the `dev` `sway` session
-3. the host can `ssh dev@192.168.64.10`
-4. the host can access guest HTTP services
-5. `bootstrap.done` prevents an unexpected second bootstrap
-6. `fish`, `Ghostty`, `Rust`, `Homebrew`, `Helix`, `Zellij`, `Zig`, `Chromium`, `Zen Browser`, and `Fcitx5` are all present
-
-## 11. Current Implementation Constraints
-
-- the default path depends on `podman` to build the Void disk on the host
-- `Chromium` Chinese input is optimized for compatibility, so it defaults to `Xwayland`
-- cross-VM clipboard is helper-based, not system-integrated
-
-## 12. References
-
-- Void Linux live images:
-  [https://docs.voidlinux.org/installation/live-images/index.html](https://docs.voidlinux.org/installation/live-images/index.html)
-- Void live/current index:
-  [https://repo-default.voidlinux.org/live/current/](https://repo-default.voidlinux.org/live/current/)
-- Void aarch64 package index:
-  [https://repo-default.voidlinux.org/current/aarch64/](https://repo-default.voidlinux.org/current/aarch64/)
-- vfkit usage:
-  [https://github.com/crc-org/vfkit/blob/main/doc/usage.md](https://github.com/crc-org/vfkit/blob/main/doc/usage.md)
+2. The GUI automatically enters the configured desktop session
+3. The host can `ssh vm@192.168.64.10`
+4. `bootstrap.done` prevents an unexpected second bootstrap
+5. `fish/zsh`, `ghostty`, Rust, Homebrew, Helix/Neovim, Zellij, Zig, Chromium, Zen Browser, and Fcitx5 are all present
+6. Post-bootstrap hooks execute once and not on restart
+7. Sync pairs and tunnels persist in `vmctl.yaml`
+8. Web UI reflects config changes without server restart

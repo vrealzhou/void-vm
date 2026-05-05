@@ -8,29 +8,12 @@ The project is intentionally scoped to one supported workflow:
 - Desktop: configurable, default `Sway`
 - Entry point: `go run ./cmd/vmctl <command>`
 - Network model: fixed IP `192.168.64.10`
-- Default user: `dev`
+- Default user: `vm`
 - Default resources: `6 CPU / 6 GiB RAM / 100 GiB disk`
 
 This is not a general-purpose VM abstraction layer. The goal is narrower: build a fast, reproducible, scriptable personal dev VM that supports both SSH and GUI use.
 
-## Supported Scope
-
-The project supports exactly two kinds of input images:
-
-1. The official Void `ROOTFS tarball`
-2. An existing disk image: `.img`, `.img.xz`, `.raw`, `.raw.xz`, or `.qcow2`
-
-These older paths are no longer maintained:
-
-- installer ISO
-- cloud-init
-- interactive installer workflows
-
-That is deliberate. They add code and maintenance cost without improving the current default workflow.
-
 ## Host Requirements
-
-The host machine needs these commands:
 
 ```bash
 vfkit
@@ -39,384 +22,216 @@ curl
 ssh
 go
 podman
-pbcopy
-pbpaste
 ```
 
 Quick check:
 
 ```bash
-command -v vfkit qemu-img curl ssh go podman pbcopy pbpaste
+command -v vfkit qemu-img curl ssh go podman
 ```
 
-## Install And First Boot
-
-There is no separate installer step for the repo itself. The default entry point is the GUI:
-
-```bash
-go run ./cmd/vmctl
-```
-
-From there you can bootstrap, start, stop, and destroy the VM.
-
-To boot directly from the CLI, run:
+## Quick Start
 
 ```bash
 go run ./cmd/vmctl start
 ```
 
-On the first successful `start`, `vmctl` will:
+On first boot, `vmctl` downloads the Void rootfs tarball, builds a disk image, extracts the kernel/initramfs, boots the VM, and runs bootstrap automatically. Subsequent starts reuse the existing VM state.
 
-1. Download the official Void rootfs into the repo-root `images/` directory by default
-2. Build a raw disk
-3. Write users, passwords, SSH keys, fixed networking, GUI, and system configuration offline
-4. Extract `vmlinuz` and `initramfs`
-5. Start the VM
-6. Wait for SSH and run bootstrap once
-
-If startup succeeds:
-
-- the GUI auto-enters the configured desktop session
-- the host can connect with:
+### Web UI
 
 ```bash
-go run ./cmd/vmctl ssh
+go run ./cmd/vmctl          # open web UI at http://localhost:8080
 ```
 
-To inspect current state:
+From the UI you can configure bootstrap preferences (shell, editor, window manager, brew/cargo packages, post-bootstrap hooks), start/stop/destroy the VM, manage sync pairs and SSH tunnels.
 
-```bash
-go run ./cmd/vmctl status
+## Configuration
+
+All config lives in `~/.config/agent-vm/vmctl.yaml`. Override the config directory with `VMCTL_CONFIG_DIR`.
+
+```yaml
+# example vmctl.yaml
+vm:
+  name: void-dev
+  cpus: 6
+  memory_mib: 6144
+  disk_size: "100G"
+  gui: true
+  width: 1920
+  height: 1200
+
+network:
+  static_ip: "192.168.64.10"
+  gateway: "192.168.64.1"
+  cidr: 24
+  dns_servers: ["1.1.1.1", "8.8.8.8"]
+  mac: "52:54:00:64:00:10"
+
+user:
+  name: vm
+  password: dev
+  root_password: root
+  ssh_public_key: ""          # blank = auto-detect ~/.ssh/id_ed25519.pub
+
+guest:
+  timezone: Australia/Sydney
+  default_shell: fish
+  default_editor: neovim
+  window_manager: sway
+
+bootstrap:
+  brew_packages:
+    - helix
+    - zellij
+    - zig
+    - opencode
+    - lazygit
+    - gitui
+  cargo_packages:
+    - crate: fresh-editor
+      command: fresh
+  hooks:
+    - "echo bootstrap complete"
+
+git:
+  user_name: ""
+  user_email: ""
+
+sync:
+  - name: myproject
+    host_path: /Users/me/projects/myproject
+    target_path: /home/vm/myproject
+    mode: copy
+    direction: host-to-vm
+
+tunnels:
+  - name: webapp
+    type: local
+    local_port: 3000
+    remote_port: 3000
 ```
 
-To print only the guest IP:
-
-```bash
-go run ./cmd/vmctl ip
-```
+Every key is optional — defaults apply for anything omitted.
 
 ## Default Layout
 
-Default directories:
-
-```text
-images/
-
-.vm/
-  void-dev/
-    disk.img
-    vmlinuz
-    initramfs.img
-    bootstrap.done
-    efi-vars.fd
-    vfkit.log
-    serial.log
-    vfkit.pid
 ```
-
-Default resources:
-
-```text
-CPU:    6
-Memory: 6144 MiB
-Disk:   100G
-IP:     192.168.64.10
+~/.config/agent-vm/
+├── vmctl.yaml
+├── scripts/
+│   └── guest-bootstrap.sh   # generated at bootstrap time
+├── images/                  # base Void rootfs tarballs
+└── void-dev/                # runtime state
+    ├── disk.img
+    ├── vmlinuz
+    ├── initramfs.img
+    ├── bootstrap.done
+    ├── vfkit.log
+    ├── serial.log
+    └── vfkit.pid
 ```
 
 Default login:
 
-- SSH user: `dev`
-- Local password: `dev / dev`
-- Root password: `root / root`
-- SSH public key: host `~/.ssh/id_ed25519.pub`
+- User `vm` / password `dev`
+- Root password `root`
+- SSH key auto-detected from `~/.ssh/id_ed25519.pub`
 
-## Daily Commands
+## CLI Commands
 
 ```bash
-go run ./cmd/vmctl start
-go run ./cmd/vmctl stop
-go run ./cmd/vmctl destroy
-go run ./cmd/vmctl status
-go run ./cmd/vmctl ssh
-go run ./cmd/vmctl ip
-go run ./cmd/vmctl gui
-go run ./cmd/vmctl bootstrap
-go run ./cmd/vmctl clip-in
-go run ./cmd/vmctl clip-out
+go run ./cmd/vmctl start       # create assets + boot VM
+go run ./cmd/vmctl stop        # stop the VM
+go run ./cmd/vmctl destroy     # stop + remove VM state
+go run ./cmd/vmctl status      # VM state, PID, IP, disk path
+go run ./cmd/vmctl ssh         # SSH into guest as user "vm"
+go run ./cmd/vmctl ip          # print guest IP
+go run ./cmd/vmctl bootstrap   # run bootstrap flow
+go run ./cmd/vmctl sync        # manage sync pairs
+go run ./cmd/vmctl tunnel      # manage SSH tunnels
 ```
 
-Meaning:
+## Sync
 
-- `start`: create any missing assets and boot the VM
-- `stop`: stop the VM
-- `destroy`: stop the VM and remove generated state and disk files, but keep the base image
-- `status`: print current state, PID, disk path, and IP
-- `ssh`: log into the guest using the configured default user
-- `ip`: print only the guest IP
-- `gui`: open the Fyne control panel
-- `bootstrap`: open the guided bootstrap flow, apply the chosen preferences, and write `bootstrap.done`
-- `clip-in`: copy macOS clipboard into the guest Wayland clipboard
-- `clip-out`: copy the guest Wayland clipboard back into macOS
+File sync between host and VM — supports two modes:
 
-The GUI control panel can:
+**copy** — rsync with backups:
+```bash
+go run ./cmd/vmctl sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode copy
+```
 
-- guide the user to bootstrap first through a popup that asks for shell, editor, and window manager
-- keep `start` and `stop` disabled until bootstrap has completed
-- start, stop, and destroy the VM after bootstrap
-- show whether the VM is running
-- sample guest CPU and memory usage over SSH
+**git** — bare repo on VM, host pushes/pulls via `git push vm` / `git pull vm`:
+```bash
+go run ./cmd/vmctl sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode git
+```
 
-## Guest Bootstrap Contents
+Sync pairs can also be configured in `vmctl.yaml` or via the web UI.
 
-Bootstrap configures:
+## Tunnels
 
-- `fish` or `zsh`
-- `starship` with the Tokyo Night preset
+SSH port forwarding between host and VM:
+
+```bash
+go run ./cmd/vmctl tunnel add --name webapp --type local --local-port 3000 --remote-port 3000
+```
+
+Also configurable in `vmctl.yaml` under the `tunnels:` section.
+
+## Guest Bootstrap
+
+Bootstrap configures inside the VM:
+
+- `fish` or `zsh` shell
+- `starship` prompt
 - `fnm` for Node.js
 - `Rust` and `cargo`
 - `Homebrew for Linux`
-- `Neovim`
-- `Helix`, `Zellij`, and `Zig`
-- `opencode`, `lazygit`, and `gitui`
-- `Ghostty`
-- `Chromium`
-- `Zen Browser`
+- `Neovim` or `Helix`
+- `Zellij`, `Zig`, `lazygit`, `opencode`
+- `Ghostty` terminal
+- `Chromium` and `Zen Browser`
 - `Fcitx5` Chinese input
 - `~/.gitconfig`
-- `tty1 autologin -> dev -> configured desktop session`
+- Autologin to desktop session
 
-Default desktop behavior:
+Post-bootstrap hooks run after all steps complete. Add them under `bootstrap.hooks` in `vmctl.yaml`.
 
-- `Super + Enter`: open `ghostty`
-- `Super + D`: open `wofi --show drun`
-- Pointer scrolling: natural scrolling, aligned with macOS
-- IME switch: left `Shift`
-- Fallback IME switch: `Caps Lock`
-- `swaybar` shows current IME state
-
-Browser notes:
-
-- `Chromium` is wrapped to use `Xwayland`
-- `Zen Browser` uses native `Wayland`
-
-## Customization
-
-Put overrides in a repo-root `.vmctl.env`. Any value you omit keeps the code default.
-Use absolute paths in `.vmctl.env` when you override file locations. The loader does not expand `~` or `$HOME`.
-
-You can also open the GUI directly:
+## Rebuild
 
 ```bash
-go run ./cmd/vmctl gui
-```
-
-Running `go run ./cmd/vmctl` without a subcommand opens the same control panel. Preferences are chosen from the `Bootstrap` popup, not from the main screen.
-
-You can start from the template:
-
-```bash
-cp .vmctl.env.example .vmctl.env
-```
-
-Template file:
-[.vmctl.env.example](/Users/zhouye/vms/vfkit-void/.vmctl.env.example)
-
-### Resources
-
-```bash
-VM_CPUS=6
-VM_MEMORY_MIB=6144
-VM_DISK_SIZE=100G
-```
-
-### Networking
-
-```bash
-VM_STATIC_IP=192.168.64.10
-VM_GATEWAY=192.168.64.1
-VM_CIDR=24
-VM_DNS_SERVERS=1.1.1.1,8.8.8.8
-VM_MAC=52:54:00:64:00:10
-```
-
-### Accounts And SSH
-
-```bash
-VM_SSH_USER=dev
-VM_GUEST_USER=dev
-VM_GUEST_PASSWORD=dev
-VM_ROOT_PASSWORD=root
-VM_SSH_PUBLIC_KEY=/absolute/path/to/id_ed25519.pub
-VM_SSH_KNOWN_HOSTS_FILE=/absolute/path/to/known_hosts
-```
-
-If `VM_SSH_KNOWN_HOSTS_FILE` is not set, `vmctl ssh` uses:
-
-```text
-StrictHostKeyChecking=no
-UserKnownHostsFile=/dev/null
-```
-
-### Image Source
-
-Default values:
-
-```bash
-VM_IMAGE_DIR=/absolute/path/to/void-vm/images
-VM_BASE_IMAGE=/absolute/path/to/void-vm/images/void-aarch64-ROOTFS-20250202.tar.xz
-VM_BASE_IMAGE_URL=https://repo-default.voidlinux.org/live/current/void-aarch64-ROOTFS-20250202.tar.xz
-```
-
-By default, `vmctl` resolves `VM_IMAGE_DIR` to the repo-root `images/` directory. If you already have a disk image elsewhere, you can just set:
-
-```bash
-VM_BASE_IMAGE=/absolute/path/to/custom.img
-```
-
-### Timezone And Display
-
-```bash
-VM_TIMEZONE=Australia/Sydney
-VM_DEFAULT_SHELL=fish
-VM_DEFAULT_EDITOR=neovim
-VM_WINDOW_MANAGER=sway
-VM_STARSHIP_PRESET_URL=https://starship.rs/presets/toml/tokyo-night.toml
-VM_GUI=1
-VM_WIDTH=1920
-VM_HEIGHT=1200
-```
-
-Bootstrap writes the prompt config to `~/.config/starship.toml` and enables it from Fish with `starship init fish | source`. The Tokyo Night preset uses Nerd Font symbols, so make sure your terminal font supports them.
-Bootstrap installs `fnm` through Homebrew, enables it in the configured shell, installs the latest LTS Node.js release, and uses that instead of a Homebrew-managed `node`.
-
-For 4K:
-
-```bash
-VM_WIDTH=3840
-VM_HEIGHT=2160
-```
-
-Resolution changes require a VM restart.
-
-## Custom Bootstrap Package Lists
-
-### Homebrew Packages
-
-```bash
-VM_BOOTSTRAP_BREW_PACKAGES="helix zellij zig opencode lazygit gitui"
-```
-
-Rules:
-
-- split formula names with spaces
-- bootstrap installs only what you list
-
-### Cargo Packages
-
-```bash
-VM_BOOTSTRAP_CARGO_PACKAGES="fresh-editor:fresh,bacon:bacon,watchexec-cli:watchexec"
-```
-
-Rules:
-
-- split entries with commas
-- each entry uses `crate:command`
-- `crate` is the name passed to `cargo install`
-- `command` is the executable checked before install
-- if the command already exists, bootstrap skips that package
-
-If you want to hard-code the default package list in the script, edit:
-[scripts/guest-bootstrap.sh](/Users/zhouye/vms/vfkit-void/scripts/guest-bootstrap.sh)
-
-## Git Configuration
-
-Bootstrap initializes `~/.gitconfig` with at least:
-
-- `core.editor = nvim`
-- `init.defaultBranch = main`
-- `push.autoSetupRemote = true`
-- `rebase.autoStash = true`
-- `merge.conflictstyle = zdiff3`
-
-To also write Git identity:
-
-```bash
-VM_GIT_USER_NAME="Your Name"
-VM_GIT_USER_EMAIL="you@example.com"
-```
-
-## Clipboard
-
-Host and guest clipboard sharing is not system-level seamless sync. It is implemented as helper commands:
-
-```bash
-go run ./cmd/vmctl clip-in
-go run ./cmd/vmctl clip-out
-```
-
-Requirements:
-
-- the guest is already in `Sway`
-- the current Wayland session is available
-
-## Shared Zellij Sessions
-
-GUI and interactive SSH sessions share the same `XDG_RUNTIME_DIR` by default:
-
-```text
-/home/dev/.local/run
-```
-
-That means zellij sessions created in the GUI are visible over SSH as well.
-
-## Rebuild And Troubleshooting
-
-To rerun only guest-side initialization:
-
-```bash
-go run ./cmd/vmctl bootstrap
-```
-
-To rebuild the VM from scratch:
-
-```bash
-rm -rf .vm/void-dev
+rm -rf ~/.config/agent-vm/void-dev
 go run ./cmd/vmctl start
 ```
 
-Useful state files:
+## Troubleshooting
 
-- Log: [.vm/void-dev/vfkit.log](/Users/zhouye/vms/vfkit-void/.vm/void-dev/vfkit.log)
-- Serial log: [.vm/void-dev/serial.log](/Users/zhouye/vms/vfkit-void/.vm/void-dev/serial.log)
+- Log: `~/.config/agent-vm/void-dev/vfkit.log`
+- Serial: `~/.config/agent-vm/void-dev/serial.log`
+- Build log: `~/.config/agent-vm/void-dev/build-script.log`
 
-## E2E
-
-End-to-end test script:
-[scripts/e2e-test.sh](/Users/zhouye/vms/vfkit-void/scripts/e2e-test.sh)
-
-Run:
+## E2E Test
 
 ```bash
 ./scripts/e2e-test.sh
 ```
 
-The script verifies:
-
-- boot
-- SSH
-- bootstrap marker
-- required commands
-- headless Chromium reachability
-- no unexpected second bootstrap after restart
-
 ## Code Layout
 
-```text
-cmd/vmctl/main.go           CLI entry point
-internal/vmctl/cobra.go    Cobra command definitions
-internal/vmctl/config.go   config loading and help text
-internal/vmctl/util.go     shared helpers
-internal/vmctl/vm.go       VM lifecycle and disk-building logic
-scripts/guest-bootstrap.sh guest-side initialization
-scripts/e2e-test.sh        end-to-end test
+```
+cmd/vmctl/main.go              CLI entry point
+internal/vmctl/
+  config.go                    config loading (LoadConfig/SaveConfig)
+  yaml_config.go               YAML schema and parsing
+  vm.go                        VM lifecycle (start/stop/destroy/bootstrap)
+  build_vfkit.go               vfkit-based Void disk builder
+  util.go                      shared helpers
+  bootstrap_script.go          guest bootstrap script generator
+  web.go / web_handlers.go     Echo v5 web server + REST API
+  sync_config.go / sync_*.go   sync pair management
+  tunnel_config.go / tunnel_*.go  SSH tunnel management
+web/static/                    vanilla HTML/CSS/JS frontend
+scripts/
+  guest-bootstrap.sh           standalone guest bootstrap (reference)
+  e2e-test.sh                  end-to-end test
 ```
