@@ -261,15 +261,15 @@ async function loadTunnels() {
             ? '<div class="list-item">No tunnels configured.</div>'
             : tunnels.map(t => {
                 const statusIcon = t.running ? '🟢' : '🔴';
-                const mapping = t.Type === 'local'
-                    ? `host:${t.LocalPort} → ${t.RemoteHost || 'localhost'}:${t.RemotePort}`
-                    : `vm:${t.RemotePort} → host:${t.LocalPort}`;
+                const mapping = t.type === 'local'
+                    ? `host:${t.local_port} → ${t.remote_host || 'localhost'}:${t.remote_port}`
+                    : `vm:${t.remote_port} → host:${t.local_port}`;
                 return `
                     <div class="list-item">
-                        <div class="list-item-info">${statusIcon} ${t.Name} — ${mapping}</div>
+                        <div class="list-item-info">${statusIcon} ${t.name} — ${mapping}</div>
                         <div class="list-item-actions">
-                            <button class="btn btn-small" onclick="toggleTunnel('${t.ID}', ${t.running})">${t.running ? 'Stop' : 'Start'}</button>
-                            <button class="btn btn-small btn-danger" onclick="removeTunnel('${t.ID}')">Remove</button>
+                            <button class="btn btn-small" onclick="toggleTunnel('${t.id}', ${t.running})">${t.running ? 'Stop' : 'Start'}</button>
+                            <button class="btn btn-small btn-danger" onclick="removeTunnel('${t.id}')">Remove</button>
                         </div>
                     </div>
                 `;
@@ -326,11 +326,11 @@ async function loadSync() {
             ? '<div class="list-item">No sync pairs configured.</div>'
             : pairs.map(p => `
                 <div class="list-item">
-                    <div class="list-item-info">${p.ID} — ${p.HostPath} ↔ ${p.VMPath}</div>
+                    <div class="list-item-info">${p.id} — ${p.host_path} ↔ ${p.vm_path}</div>
                     <div class="list-item-actions">
-                        <button class="btn btn-small" onclick="runSync('${p.ID}')">Sync</button>
-                        ${p.Mode === 'copy' ? `<button class="btn btn-small" onclick="showHistory('${p.ID}')">History</button>` : ''}
-                        <button class="btn btn-small btn-danger" onclick="removeSync('${p.ID}')">Remove</button>
+                        <button class="btn btn-small" onclick="runSync('${p.id}')">Sync</button>
+                        ${p.mode === 'copy' ? `<button class="btn btn-small" onclick="showHistory('${p.id}')">History</button>` : ''}
+                        <button class="btn btn-small btn-danger" onclick="removeSync('${p.id}')">Remove</button>
                     </div>
                 </div>
             `).join('');
