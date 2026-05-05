@@ -43,8 +43,11 @@ func handleStatus(cfg Config) echo.HandlerFunc {
 				"memoryMiB":     cfg.MemoryMiB,
 				"diskSize":      cfg.DiskSize,
 				"staticIP":      cfg.StaticIP,
-				"brewPackages":  cfg.BootstrapBrewPackages,
-				"cargoPackages": cfg.BootstrapCargoPackages,
+				"brewPackages":  strings.Fields(cfg.BootstrapBrewPackages),
+				"cargoPackages": parseCargoPackagesForWeb(cfg.BootstrapCargoPackages),
+				"hooks":         cfg.BootstrapExtraCommands,
+				"userName":      cfg.GuestUser,
+				"userEmail":     cfg.GitUserEmail,
 			},
 		})
 	}
@@ -60,34 +63,54 @@ func handleBootstrap(cfg Config) echo.HandlerFunc {
 		StaticIP      string `json:"staticIP"`
 		BrewPackages  string `json:"brewPackages"`
 		CargoPackages string `json:"cargoPackages"`
+		Hooks         string `json:"hooks"`
+		UserName      string `json:"userName"`
+		UserEmail     string `json:"userEmail"`
 	}
 	return func(c *echo.Context) error {
 		var req bootstrapReq
 		if err := c.Bind(&req); err != nil {
 			return jsonError(c, http.StatusBadRequest, "invalid request")
 		}
-		cfgPath := DotEnvPath(cfg.RepoRoot)
-		updates := map[string]string{
-			"VM_DEFAULT_SHELL":           req.Shell,
-			"VM_DEFAULT_EDITOR":          req.Editor,
-			"VM_WINDOW_MANAGER":          req.WindowManager,
-			"VM_BOOTSTRAP_BREW_PACKAGES":  req.BrewPackages,
-			"VM_BOOTSTRAP_CARGO_PACKAGES": req.CargoPackages,
-		}
-		if req.MemoryMiB > 0 {
-			updates["VM_MEMORY_MIB"] = fmt.Sprintf("%d", req.MemoryMiB)
-		}
-		if req.DiskSize != "" {
-			updates["VM_DISK_SIZE"] = req.DiskSize
-		}
-		if req.StaticIP != "" {
-			updates["VM_STATIC_IP"] = req.StaticIP
-		}
-		if err := UpdateDotEnvFile(cfgPath, updates); err != nil {
-			return jsonError(c, http.StatusInternalServerError, err.Error())
-		}
+		// Write preferences to YAML config
 		newCfg, err := LoadConfig()
 		if err != nil {
+			return jsonError(c, http.StatusInternalServerError, err.Error())
+		}
+		if req.Shell != "" {
+			newCfg.DefaultShell = req.Shell
+		}
+		if req.Editor != "" {
+			newCfg.DefaultEditor = req.Editor
+		}
+		if req.WindowManager != "" {
+			newCfg.WindowManager = req.WindowManager
+		}
+		if req.BrewPackages != "" {
+			newCfg.BootstrapBrewPackages = req.BrewPackages
+		}
+		if req.CargoPackages != "" {
+			newCfg.BootstrapCargoPackages = req.CargoPackages
+		}
+		if req.MemoryMiB > 0 {
+			newCfg.MemoryMiB = req.MemoryMiB
+		}
+		if req.DiskSize != "" {
+			newCfg.DiskSize = req.DiskSize
+		}
+		if req.StaticIP != "" {
+			newCfg.StaticIP = req.StaticIP
+		}
+		if req.Hooks != "" {
+			newCfg.BootstrapExtraCommands = req.Hooks
+		}
+		if req.UserName != "" {
+			newCfg.GitUserName = req.UserName
+		}
+		if req.UserEmail != "" {
+			newCfg.GitUserEmail = req.UserEmail
+		}
+		if err := SaveConfig(newCfg); err != nil {
 			return jsonError(c, http.StatusInternalServerError, err.Error())
 		}
 		go func() {
@@ -446,4 +469,24 @@ func handleSyncHistory(cfg Config) echo.HandlerFunc {
 		}
 		return jsonSuccess(c, backups)
 	}
+}
+
+func parseCargoPackagesForWeb(raw string) []map[string]string {
+	var result []map[string]string
+	if raw == "" {
+		return result
+	}
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, ":", 2)
+		m := map[string]string{"crate": parts[0]}
+		if len(parts) == 2 {
+			m["command"] = parts[1]
+		}
+		result = append(result, m)
+	}
+	return result
 }
