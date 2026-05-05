@@ -51,7 +51,7 @@ func generateBootstrapScript(cfg Config) (string, error) {
 		GitUserEmail:           cfg.GitUserEmail,
 		Timezone:               cfg.Timezone,
 		VoidRepoURL:            strings.TrimRight(cfg.VoidRepository, "/") + "/current/aarch64",
-		ExtraCommands:          cfg.BootstrapExtraCommands,
+		ExtraCommands:          strings.ReplaceAll(cfg.BootstrapExtraCommands, "\n", " && "),
 		SetDefaultShell:        cfg.SetDefaultShell,
 	}
 

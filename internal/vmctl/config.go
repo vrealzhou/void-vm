@@ -95,7 +95,7 @@ func LoadConfig() (Config, error) {
 	}
 	cargoPackagesStr := strings.Join(cargoParts, ",")
 
-	extraCommands := strings.Join(vcfg.Bootstrap.Hooks, " && ")
+	extraCommands := strings.Join(vcfg.Bootstrap.Hooks, "\n")
 
 	stateDir := filepath.Join(configDir, vcfg.VM.Name)
 	imageDir := filepath.Join(configDir, "images")
@@ -260,7 +260,7 @@ func SaveConfig(cfg Config) error {
 		vcfg.Bootstrap.CargoPackages = append(vcfg.Bootstrap.CargoPackages, cs)
 	}
 	if cfg.BootstrapExtraCommands != "" {
-		vcfg.Bootstrap.Hooks = strings.Split(strings.TrimSpace(cfg.BootstrapExtraCommands), " && ")
+		vcfg.Bootstrap.Hooks = strings.Split(strings.TrimSpace(cfg.BootstrapExtraCommands), "\n")
 	}
 
 	vcfg.applyDefaults()
