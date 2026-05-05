@@ -26,6 +26,12 @@ func Start(cfg Config) error {
 		return Status(cfg)
 	}
 
+	buildPIDFile := filepath.Join(cfg.StateDir, "build-vfkit.pid")
+	buildRunning, err := pidIsRunning(buildPIDFile)
+	if err == nil && buildRunning {
+		return fmt.Errorf("disk build is already in progress (PID file: %s)", buildPIDFile)
+	}
+
 	voidBootstrapCandidate := isVoidLinuxRootfsTarball(cfg.BaseImage)
 
 	cfg, err = prepareDisk(cfg)
