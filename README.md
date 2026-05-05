@@ -15,6 +15,8 @@ This is not a general-purpose VM abstraction layer. The goal is narrower: build 
 
 ## Host Requirements
 
+**Platform:** Apple Silicon macOS only. `vfkit` uses Apple's Virtualization framework.
+
 ```bash
 vfkit
 qemu-img
