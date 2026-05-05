@@ -182,6 +182,10 @@ go run ./cmd/agent-vm tunnel add --name webapp --type local --local-port 3000 --
 
 Also configurable in `vmctl.yaml` under the `tunnels:` section.
 
+## Networking
+
+The VM runs behind vfkit NAT. Fixed IP `192.168.64.10/24`, gateway `192.168.64.1`. The host is reachable from inside the guest as `host.vm` — resolves to the gateway IP, so `curl http://host.vm:8080` from the VM reaches the host.
+
 ## Guest Bootstrap
 
 Bootstrap configures inside the VM:

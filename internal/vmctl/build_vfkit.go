@@ -509,6 +509,7 @@ retry_xbps "xbps-install -y -R ${REPO} -Suy --root=${TARGET} seatd sway foot gho
 retry_xbps "xbps-install -y -R ${REPO} -Suy --root=${TARGET} chromium"
 
 printf '%s\n' "{{.Name}}" > ${TARGET}/etc/hostname
+echo "{{.Gateway}} host.vm" >> ${TARGET}/etc/hosts
 
 mkdir -p ${TARGET}/etc/ssh/sshd_config.d
 cat > ${TARGET}/etc/ssh/sshd_config.d/99-vmctl.conf <<SSH
