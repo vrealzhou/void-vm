@@ -196,8 +196,11 @@ els.btnBootstrap.onclick = () => {
         <div class="form-group"><label>Memory (MiB)</label><input id="bootstrap-memory" type="number" placeholder="6144" value="${c.memoryMiB || 6144}"></div>
         <div class="form-group"><label>Disk size</label><input id="bootstrap-disk" placeholder="100G" value="${c.diskSize || '100G'}"></div>
         <div class="form-group"><label>Guest IP address</label><input id="bootstrap-ip" placeholder="192.168.64.10" value="${c.staticIP || '192.168.64.10'}"></div>
-        <div class="form-group"><label>Brew packages (space-separated)</label><input id="bootstrap-brew-packages" placeholder="helix zellij zig" value="${c.brewPackages || ''}"></div>
-        <div class="form-group"><label>Cargo packages (comma-separated, crate:binary)</label><input id="bootstrap-cargo-packages" placeholder="fresh-editor:fresh" value="${c.cargoPackages || ''}"></div>
+        <div class="form-group"><label>Brew packages (space-separated)</label><input id="bootstrap-brew-packages" placeholder="helix zellij zig" value="${Array.isArray(c.brewPackages) ? c.brewPackages.join(' ') : (c.brewPackages || '')}"></div>
+        <div class="form-group"><label>Cargo packages (comma-separated, crate:binary)</label><input id="bootstrap-cargo-packages" placeholder="fresh-editor:fresh" value="${Array.isArray(c.cargoPackages) ? c.cargoPackages.map(p => p.crate + ':' + (p.command || p.crate)).join(',') : (c.cargoPackages || '')}"></div>
+        <div class="form-group"><label>Post-bootstrap hooks (one per line)</label><textarea id="bootstrap-hooks" rows="5" placeholder="echo custom setup done"></textarea></div>
+        <div class="form-group"><label>Git user name</label><input id="bootstrap-git-user" placeholder="Your Name" value="${c.userName || ''}"></div>
+        <div class="form-group"><label>Git user email</label><input id="bootstrap-git-email" placeholder="you@example.com" value="${c.userEmail || ''}"></div>
     `, async () => {
         setBusy(true); setAction('Running bootstrap...');
         try {
@@ -214,6 +217,9 @@ els.btnBootstrap.onclick = () => {
             if (mem > 0) body.memoryMiB = mem;
             if (disk) body.diskSize = disk;
             if (ip) body.staticIP = ip;
+            body.hooks = document.getElementById('bootstrap-hooks').value.trim();
+            body.userName = document.getElementById('bootstrap-git-user').value.trim();
+            body.userEmail = document.getElementById('bootstrap-git-email').value.trim();
             await API.post('/api/bootstrap', body);
             showToast('Bootstrap started');
         } catch (err) {
