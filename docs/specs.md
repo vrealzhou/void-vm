@@ -1,4 +1,4 @@
-# vfkit Linux Dev VM Spec
+# Agent VM Spec
 
 Updated: 2026-05-05
 

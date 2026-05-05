@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/vrealzhou/void-vm/internal/vmctl"
+	"github.com/vrealzhou/agent-vm/internal/vmctl"
 )
 
 func main() {

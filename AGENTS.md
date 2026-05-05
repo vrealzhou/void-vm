@@ -9,7 +9,7 @@ go run ./cmd/vmctl status   # VM state, PID, IP, disk path
 go run ./cmd/vmctl ssh      # SSH into guest as user "vm" @ 192.168.64.10
 ```
 
-No Makefile. Run the binary directly. Module: `github.com/vrealzhou/void-vm`, Go 1.26.
+No Makefile. Run the binary directly. Module: `github.com/vrealzhou/agent-vm`, Go 1.26.
 
 ## Test
 
