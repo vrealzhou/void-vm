@@ -280,6 +280,5 @@ internal/vmctl/
   tunnel_config.go / tunnel_*.go  SSH tunnel management
 web/static/                    vanilla HTML/CSS/JS frontend
 scripts/
-  guest-bootstrap.sh           standalone guest bootstrap (reference)
   e2e-test.sh                  end-to-end test
 ```
