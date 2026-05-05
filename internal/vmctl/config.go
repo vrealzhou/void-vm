@@ -1,12 +1,9 @@
 package vmctl
 
 import (
-	"bufio"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -57,29 +54,21 @@ type Config struct {
 	GUI                    bool
 	Width                  int
 	Height                 int
+	ConfigDir  string
+	SyncPairs  []SyncPair
+	Tunnels    []Tunnel
 }
 
 func LoadConfig() (Config, error) {
-	repoRoot, err := determineRepoRoot()
+	configDir, err := determineConfigDir()
 	if err != nil {
 		return Config{}, err
 	}
+	yamlPath := filepath.Join(configDir, "vmctl.yaml")
 
-	env := map[string]string{}
-	for _, entry := range os.Environ() {
-		parts := strings.SplitN(entry, "=", 2)
-		if len(parts) == 2 {
-			env[parts[0]] = parts[1]
-		}
-	}
-
-	dotEnvPath := filepath.Join(repoRoot, ".vmctl.env")
-	if _, err := os.Stat(dotEnvPath); err == nil {
-		fileEnv, err := parseDotEnv(dotEnvPath)
-		if err != nil {
-			return Config{}, err
-		}
-		maps.Copy(env, fileEnv)
+	vcfg, err := loadVMConfigFile(yamlPath)
+	if err != nil {
+		return Config{}, fmt.Errorf("failed to load config: %w", err)
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -87,73 +76,88 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
-	cfg := Config{RepoRoot: repoRoot}
-	cfg.Name = envOr(env, "VM_NAME", "void-dev")
-	cfg.StateDir = envOr(env, "VM_STATE_DIR", filepath.Join(repoRoot, ".vm", cfg.Name))
-	cfg.DiskPath = envOr(env, "VM_DISK_PATH", filepath.Join(cfg.StateDir, "disk.img"))
-	cfg.KernelPath = envOr(env, "VM_KERNEL_PATH", filepath.Join(cfg.StateDir, "vmlinuz"))
-	cfg.InitrdPath = envOr(env, "VM_INITRD_PATH", filepath.Join(cfg.StateDir, "initramfs.img"))
-	cfg.BootstrapMarker = envOr(env, "VM_BOOTSTRAP_MARKER", filepath.Join(cfg.StateDir, "bootstrap.done"))
-	cfg.EFIVarsPath = envOr(env, "VM_EFI_VARS_PATH", filepath.Join(cfg.StateDir, "efi-vars.fd"))
-	cfg.PIDFile = envOr(env, "VM_PID_FILE", filepath.Join(cfg.StateDir, "vfkit.pid"))
-	cfg.RestSocket = envOr(env, "VM_REST_SOCKET", filepath.Join(cfg.StateDir, "vfkit.sock"))
-	cfg.LogFile = envOr(env, "VM_LOG_FILE", filepath.Join(cfg.StateDir, "vfkit.log"))
-	cfg.SerialLog = envOr(env, "VM_SERIAL_LOG", filepath.Join(cfg.StateDir, "serial.log"))
+	sshPublicKey := vcfg.User.SSHPublicKey
+	if sshPublicKey == "" {
+		sshPublicKey = filepath.Join(homeDir, ".ssh", "id_ed25519.pub")
+	}
 
-	if cfg.CPUs, err = intEnv(env, "VM_CPUS", 6); err != nil {
-		return Config{}, err
-	}
-	if cfg.MemoryMiB, err = intEnv(env, "VM_MEMORY_MIB", 6144); err != nil {
-		return Config{}, err
-	}
-	cfg.DiskSize = envOr(env, "VM_DISK_SIZE", "100G")
-	cfg.MAC = envOr(env, "VM_MAC", "52:54:00:64:00:10")
-	cfg.StaticIP = envOr(env, "VM_STATIC_IP", "192.168.64.10")
-	cfg.Gateway = envOr(env, "VM_GATEWAY", "192.168.64.1")
-	if cfg.CIDR, err = intEnv(env, "VM_CIDR", 24); err != nil {
-		return Config{}, err
-	}
-	cfg.DNSServers = envOr(env, "VM_DNS_SERVERS", cfg.Gateway+",1.1.1.1,8.8.8.8")
+	dnsServersStr := strings.Join(vcfg.Network.DNSServers, " ")
 
-	cfg.SSHUser = envOr(env, "VM_SSH_USER", "vm")
-	cfg.GuestUser = envOr(env, "VM_GUEST_USER", "vm")
-	cfg.GuestPassword = envOr(env, "VM_GUEST_PASSWORD", "vm")
-	cfg.RootPassword = envOr(env, "VM_ROOT_PASSWORD", "root")
-	cfg.SSHPublicKey = envOr(env, "VM_SSH_PUBLIC_KEY", filepath.Join(homeDir, ".ssh", "id_ed25519.pub"))
-	cfg.SSHPrivateKey = envOr(env, "VM_SSH_PRIVATE_KEY", "")
-	cfg.SSHKnownHostsFile = envOr(env, "VM_SSH_KNOWN_HOSTS_FILE", "")
-	cfg.Timezone = envOr(env, "VM_TIMEZONE", "Australia/Sydney")
-	if cfg.DefaultShell, err = choiceEnv(env, "VM_DEFAULT_SHELL", "fish", "fish", "zsh"); err != nil {
-		return Config{}, err
-	}
-	if cfg.DefaultEditor, err = choiceEnv(env, "VM_DEFAULT_EDITOR", "neovim", "neovim", "helix"); err != nil {
-		return Config{}, err
-	}
-	if cfg.WindowManager, err = choiceEnv(env, "VM_WINDOW_MANAGER", "sway", "sway", "xfce"); err != nil {
-		return Config{}, err
-	}
-	cfg.StarshipPresetURL = envOr(env, "VM_STARSHIP_PRESET_URL", "https://starship.rs/presets/toml/tokyo-night.toml")
-	cfg.BootstrapBrewPackages = envOr(env, "VM_BOOTSTRAP_BREW_PACKAGES", "")
-	cfg.BootstrapCargoPackages = envOr(env, "VM_BOOTSTRAP_CARGO_PACKAGES", "")
-	cfg.GitUserName = envOr(env, "VM_GIT_USER_NAME", "")
-	cfg.GitUserEmail = envOr(env, "VM_GIT_USER_EMAIL", "")
-	if cfg.SetDefaultShell, err = boolEnv(env, "VM_SET_DEFAULT_SHELL", true); err != nil {
-		return Config{}, err
-	}
-	cfg.BootstrapExtraCommands = envOr(env, "VM_BOOTSTRAP_EXTRA_COMMANDS", "")
-	cfg.VoidRepository = envOr(env, "VM_VOID_REPOSITORY", "https://repo-default.voidlinux.org")
+	brewPackagesStr := strings.Join(vcfg.Bootstrap.BrewPackages, " ")
 
-	cfg.ImageDir = envOr(env, "VM_IMAGE_DIR", filepath.Join(repoRoot, "images"))
-	cfg.BaseImage = envOr(env, "VM_BASE_IMAGE", "")
-	cfg.BaseImageURL = envOr(env, "VM_BASE_IMAGE_URL", "")
-	cfg.BuildKernelURL = envOr(env, "VM_BUILD_KERNEL_URL", "")
-	if cfg.GUI, err = boolEnv(env, "VM_GUI", true); err != nil {
-		return Config{}, err
+	var cargoParts []string
+	for _, cp := range vcfg.Bootstrap.CargoPackages {
+		cmd := cp.Command
+		if cmd == "" {
+			cmd = cp.Crate
+		}
+		cargoParts = append(cargoParts, cp.Crate+":"+cmd)
 	}
-	if cfg.Width, err = intEnv(env, "VM_WIDTH", 1920); err != nil {
-		return Config{}, err
+	cargoPackagesStr := strings.Join(cargoParts, ",")
+
+	extraCommands := strings.Join(vcfg.Bootstrap.Hooks, " && ")
+
+	stateDir := filepath.Join(configDir, vcfg.VM.Name)
+	imageDir := filepath.Join(configDir, "images")
+
+	cfg := Config{
+		ConfigDir:              configDir,
+		Name:                   vcfg.VM.Name,
+		StateDir:               stateDir,
+		DiskPath:               filepath.Join(stateDir, "disk.img"),
+		KernelPath:             filepath.Join(stateDir, "vmlinuz"),
+		InitrdPath:             filepath.Join(stateDir, "initramfs.img"),
+		BootstrapMarker:        filepath.Join(stateDir, "bootstrap.done"),
+		EFIVarsPath:            filepath.Join(stateDir, "efi-vars.fd"),
+		PIDFile:                filepath.Join(stateDir, "vfkit.pid"),
+		RestSocket:             filepath.Join(stateDir, "vfkit.sock"),
+		LogFile:                filepath.Join(stateDir, "vfkit.log"),
+		SerialLog:              filepath.Join(stateDir, "serial.log"),
+		CPUs:                   vcfg.VM.CPUs,
+		MemoryMiB:              vcfg.VM.MemoryMiB,
+		DiskSize:               vcfg.VM.DiskSize,
+		MAC:                    vcfg.Network.MAC,
+		StaticIP:               vcfg.Network.StaticIP,
+		Gateway:                vcfg.Network.Gateway,
+		CIDR:                   vcfg.Network.CIDR,
+		DNSServers:             dnsServersStr,
+		SSHUser:                vcfg.User.Name,
+		GuestUser:              vcfg.User.Name,
+		GuestPassword:          vcfg.User.Password,
+		RootPassword:           vcfg.User.RootPassword,
+		SSHPublicKey:           sshPublicKey,
+		SSHPrivateKey:          strings.TrimSuffix(sshPublicKey, ".pub"),
+		SSHKnownHostsFile:      "",
+		Timezone:               vcfg.Guest.Timezone,
+		DefaultShell:           vcfg.Guest.DefaultShell,
+		DefaultEditor:          vcfg.Guest.DefaultEditor,
+		WindowManager:          vcfg.Guest.WindowManager,
+		StarshipPresetURL:      "https://starship.rs/presets/toml/tokyo-night.toml",
+		BootstrapBrewPackages:  brewPackagesStr,
+		BootstrapCargoPackages: cargoPackagesStr,
+		GitUserName:            vcfg.Git.UserName,
+		GitUserEmail:           vcfg.Git.UserEmail,
+		SetDefaultShell:        true,
+		BootstrapExtraCommands: extraCommands,
+		VoidRepository:         "https://repo-default.voidlinux.org",
+		ImageDir:               imageDir,
+		BaseImage:              "",
+		BaseImageURL:           "",
+		BuildKernelURL:         "",
+		GUI:                    vcfg.VM.GUI,
+		Width:                  vcfg.VM.Width,
+		Height:                 vcfg.VM.Height,
+		SyncPairs:              vcfg.Sync,
+		Tunnels:                vcfg.Tunnels,
 	}
-	if cfg.Height, err = intEnv(env, "VM_HEIGHT", 1200); err != nil {
+	if cfg.Width == 0 {
+		cfg.Width = 1920
+	}
+	if cfg.Height == 0 {
+		cfg.Height = 1200
+	}
+
+	if err := validateConfig(cfg); err != nil {
 		return Config{}, err
 	}
 
@@ -162,7 +166,7 @@ func LoadConfig() (Config, error) {
 
 func Usage(cfg Config) string {
 	return fmt.Sprintf(`Usage:
-  go run ./cmd/vmctl           # open the GUI control panel
+  go run ./cmd/vmctl           # open the web UI
   go run ./cmd/vmctl <command>
 
 Commands:
@@ -170,7 +174,7 @@ Commands:
   stop       Stop the VM via vfkit REST API
   destroy    Stop the VM and remove generated VM state and disk files
   status     Show VM state and effective network target
-  gui        Open the Fyne VM control panel
+  gui        Open the web VM control panel
   bootstrap  Run the guided bootstrap flow and write bootstrap.done
   clip-in    Copy the macOS clipboard into the guest Wayland clipboard
   clip-out   Copy the guest Wayland clipboard into the macOS clipboard
@@ -179,120 +183,86 @@ Commands:
   sync       Manage file sync pairs between host and VM
   tunnel     Manage SSH tunnels
 
-Important environment variables:
-  VM_MEMORY_MIB=6144
-  VM_DISK_SIZE=100G
-  VM_STATIC_IP=192.168.64.10
-  VM_GATEWAY=192.168.64.1
-  VM_IMAGE_DIR=%s
-  VM_BASE_IMAGE=%s
-  VM_BASE_IMAGE_URL=%s
-  VM_SSH_USER=vm
-  VM_GUEST_USER=vm
-  VM_GUEST_PASSWORD=vm
-  VM_ROOT_PASSWORD=root
-  VM_SSH_PUBLIC_KEY=%s
-  VM_TIMEZONE=%s
-  VM_DEFAULT_SHELL=fish
-  VM_DEFAULT_EDITOR=neovim
-  VM_WINDOW_MANAGER=sway
-  VM_VOID_REPOSITORY=%s
-  VM_STARSHIP_PRESET_URL=https://starship.rs/presets/toml/nerd-font-symbols.toml
-  VM_BOOTSTRAP_BREW_PACKAGES="helix zellij zig opencode lazygit gitui"
-  VM_BOOTSTRAP_CARGO_PACKAGES="fresh-editor:fresh"
-  VM_GIT_USER_NAME="Your Name"
-  VM_GIT_USER_EMAIL="you@example.com"
-  VM_GUI=1
+Configuration: %s/vmctl.yaml
+Override with: VMCTL_CONFIG_DIR=/custom/path
 
-Notes:
-  - Running vmctl with no subcommand opens the GUI control panel.
-  - By default vmctl uses the official Void Linux aarch64 glibc ROOTFS tarball
-    and builds a bootable raw disk with podman.
-  - The generated VM uses direct kernel boot via vfkit --kernel/--initrd and
-    stores boot assets at %s and %s.
-  - On first successful boot, vmctl waits for SSH and runs bootstrap
-    automatically once, then records %s.
-  - If %s does not exist, vmctl downloads it automatically to
-    %s.
-`, cfg.ImageDir, cfg.BaseImage, cfg.BaseImageURL, cfg.SSHPublicKey, cfg.Timezone, cfg.VoidRepository, cfg.KernelPath, cfg.InitrdPath, cfg.BootstrapMarker, cfg.BaseImage, cfg.ImageDir)
+Defaults:
+  VM:          6 CPU / 6144 MiB RAM / 100 GiB disk / 1920x1200
+  Network:     192.168.64.10 / gateway 192.168.64.1
+  User:        vm / password dev, root password root
+  Shell:       fish, editor: neovim, WM: sway
+
+`, cfg.ConfigDir)
 }
 
-func determineRepoRoot() (string, error) {
-	if root := os.Getenv("VMCTL_REPO_ROOT"); root != "" {
-		return filepath.Clean(root), nil
+func validateConfig(cfg Config) error {
+	validShells := map[string]bool{"fish": true, "zsh": true}
+	if !validShells[cfg.DefaultShell] {
+		return fmt.Errorf("invalid default_shell %q: must be fish or zsh", cfg.DefaultShell)
 	}
-	return os.Getwd()
+	validEditors := map[string]bool{"neovim": true, "helix": true}
+	if !validEditors[cfg.DefaultEditor] {
+		return fmt.Errorf("invalid default_editor %q: must be neovim or helix", cfg.DefaultEditor)
+	}
+	validWMs := map[string]bool{"sway": true, "xfce": true}
+	if !validWMs[cfg.WindowManager] {
+		return fmt.Errorf("invalid window_manager %q: must be sway or xfce", cfg.WindowManager)
+	}
+	return nil
 }
 
-func parseDotEnv(path string) (map[string]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
+func SaveConfig(cfg Config) error {
+	if err := os.MkdirAll(cfg.ConfigDir, 0o755); err != nil {
+		return err
 	}
-	defer file.Close()
+	yamlPath := filepath.Join(cfg.ConfigDir, "vmctl.yaml")
 
-	values := map[string]string{}
-	scanner := bufio.NewScanner(file)
-	lineNumber := 0
-	for scanner.Scan() {
-		lineNumber++
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+	vcfg := VMConfigFile{}
+	vcfg.VM.Name = cfg.Name
+	vcfg.VM.CPUs = cfg.CPUs
+	vcfg.VM.MemoryMiB = cfg.MemoryMiB
+	vcfg.VM.DiskSize = cfg.DiskSize
+	vcfg.VM.GUI = cfg.GUI
+	vcfg.VM.Width = cfg.Width
+	vcfg.VM.Height = cfg.Height
+	vcfg.Network.StaticIP = cfg.StaticIP
+	vcfg.Network.Gateway = cfg.Gateway
+	vcfg.Network.CIDR = cfg.CIDR
+	vcfg.Network.MAC = cfg.MAC
+	vcfg.User.Name = cfg.GuestUser
+	vcfg.User.Password = cfg.GuestPassword
+	vcfg.User.RootPassword = cfg.RootPassword
+	vcfg.User.SSHPublicKey = cfg.SSHPublicKey
+	vcfg.Guest.Timezone = cfg.Timezone
+	vcfg.Guest.DefaultShell = cfg.DefaultShell
+	vcfg.Guest.DefaultEditor = cfg.DefaultEditor
+	vcfg.Guest.WindowManager = cfg.WindowManager
+	vcfg.Git.UserName = cfg.GitUserName
+	vcfg.Git.UserEmail = cfg.GitUserEmail
+	vcfg.Sync = cfg.SyncPairs
+	vcfg.Tunnels = cfg.Tunnels
+
+	if cfg.DNSServers != "" {
+		vcfg.Network.DNSServers = strings.Fields(cfg.DNSServers)
+	}
+
+	vcfg.Bootstrap.BrewPackages = strings.Fields(cfg.BootstrapBrewPackages)
+	for _, entry := range strings.Split(cfg.BootstrapCargoPackages, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
 			continue
 		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			return nil, fmt.Errorf("%s:%d: expected KEY=VALUE", path, lineNumber)
+		parts := strings.SplitN(entry, ":", 2)
+		cs := CargoPackageSpec{Crate: parts[0]}
+		if len(parts) == 2 {
+			cs.Command = parts[1]
 		}
-		values[strings.TrimSpace(key)] = strings.Trim(strings.TrimSpace(value), `"'`)
+		vcfg.Bootstrap.CargoPackages = append(vcfg.Bootstrap.CargoPackages, cs)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
+	if cfg.BootstrapExtraCommands != "" {
+		vcfg.Bootstrap.Hooks = strings.Split(strings.TrimSpace(cfg.BootstrapExtraCommands), " && ")
 	}
-	return values, nil
-}
 
-func envOr(env map[string]string, key, fallback string) string {
-	if value, ok := env[key]; ok && value != "" {
-		return value
-	}
-	return fallback
-}
-
-func intEnv(env map[string]string, key string, fallback int) (int, error) {
-	if value, ok := env[key]; ok && value != "" {
-		n, err := strconv.Atoi(value)
-		if err != nil {
-			return 0, fmt.Errorf("%s must be an integer", key)
-		}
-		return n, nil
-	}
-	return fallback, nil
-}
-
-func boolEnv(env map[string]string, key string, fallback bool) (bool, error) {
-	if value, ok := env[key]; ok && value != "" {
-		switch strings.ToLower(value) {
-		case "1", "true", "yes", "on":
-			return true, nil
-		case "0", "false", "no", "off":
-			return false, nil
-		default:
-			return false, fmt.Errorf("%s must be a boolean", key)
-		}
-	}
-	return fallback, nil
-}
-
-func choiceEnv(env map[string]string, key, fallback string, allowed ...string) (string, error) {
-	value := fallback
-	if raw, ok := env[key]; ok && raw != "" {
-		value = raw
-	}
-	for _, option := range allowed {
-		if value == option {
-			return value, nil
-		}
-	}
-	return "", fmt.Errorf("%s must be one of: %s", key, strings.Join(allowed, ", "))
+	vcfg.applyDefaults()
+	return saveVMConfigFile(yamlPath, vcfg)
 }
