@@ -2,3 +2,4 @@
 .cache-test
 .DS_Store
 /vmctl
+agent-vm
