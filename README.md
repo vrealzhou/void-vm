@@ -21,13 +21,17 @@ qemu-img
 curl
 ssh
 go
+```
+
+Optional (fallback disk builder):
+```bash
 podman
 ```
 
 Quick check:
 
 ```bash
-command -v vfkit qemu-img curl ssh go podman
+command -v vfkit qemu-img curl ssh go
 ```
 
 ## Quick Start
