@@ -218,6 +218,24 @@ go run ./cmd/agent-vm start
 - Serial: `~/.config/agent-vm/void-dev/serial.log`
 - Build log: `~/.config/agent-vm/void-dev/build-script.log`
 
+### VPN breaks SSH to VM
+
+Cisco AnyConnect and similar VPNs redirect all traffic including local subnets. The VM becomes unreachable at `192.168.64.10`. Fix by adding a static route that bypasses the VPN:
+
+```bash
+# find the bridge interface (usually bridge100)
+BRIDGE=$(ifconfig | grep -B1 "192.168.64" | head -1 | awk '{print $1}' | sed 's/:$//')
+
+# route VM subnet through vfkit's bridge, not the VPN
+sudo route -n add -net 192.168.64.0/24 -interface "$BRIDGE"
+```
+
+Verify:
+
+```bash
+ssh vm@192.168.64.10
+```
+
 ## E2E Test
 
 ```bash
