@@ -358,7 +358,7 @@ func prepareDisk(cfg Config) (Config, error) {
 
 func resolveBaseImage(cfg Config) (Config, error) {
 	if cfg.BaseImage == "" {
-		cfg.BaseImage = discoverFirstFile(cfg.RepoRoot, "disk")
+		cfg.BaseImage = discoverFirstFile(cfg.ImageDir, "disk")
 	}
 	if cfg.BaseImage == "" {
 		matches, _ := filepath.Glob(filepath.Join(cfg.ImageDir, "void-aarch64-ROOTFS-*.tar.xz"))
@@ -544,7 +544,7 @@ func buildVoidLinuxDisk(cfg Config) error {
 		"-e", "DEFAULT_SHELL="+cfg.DefaultShell,
 		"-e", "DEFAULT_EDITOR="+cfg.DefaultEditor,
 		"-e", "WINDOW_MANAGER="+cfg.WindowManager,
-		"-v", cfg.RepoRoot+":/repo:ro",
+		"-v", cfg.ImageDir+":/repo:ro",
 		"-v", cfg.StateDir+":/work",
 		"-v", cfg.BaseImage+":/input/base.tar.xz:ro",
 		"-v", cfg.SSHPublicKey+":/input/authorized_key.pub:ro",
