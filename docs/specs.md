@@ -12,7 +12,7 @@ Provide a single-command, reproducible `arm64` Linux development VM on Apple Sil
 - SSH target: `ssh vm@192.168.64.10`
 - Default user: `vm`
 - Default resources: `6 CPU / 6 GiB RAM / 100 GiB disk`
-- Entry point: `go run ./cmd/vmctl start`
+- Entry point: `go run ./cmd/agent-vm start`
 - Config: `~/.config/agent-vm/vmctl.yaml` (YAML)
 
 Expected outcome:
@@ -151,7 +151,7 @@ A list of inline shell commands under `bootstrap.hooks`. Execute once after all 
 
 ### 5.1 First Boot
 
-Running `go run ./cmd/vmctl start` must automatically:
+Running `go run ./cmd/agent-vm start` must automatically:
 
 1. download the official Void rootfs into `~/.config/agent-vm/images/`
 2. build a raw disk via vfkit (or podman fallback)
@@ -207,7 +207,7 @@ SSH port forwarding managed under `tunnels:` in `vmctl.yaml`. Supports local and
 
 ## 10. Web UI
 
-Running `go run ./cmd/vmctl` without a subcommand starts the web UI on port 8080 (`VM_MANAGER_PORT`).
+Running `go run ./cmd/agent-vm` without a subcommand starts the web UI on port 8080 (`VM_MANAGER_PORT`).
 
 The UI provides:
 - Bootstrap configuration (shell, editor, WM, packages, hooks, git identity)
@@ -232,7 +232,7 @@ The UI provides:
 
 ## 12. Acceptance Criteria
 
-1. `go run ./cmd/vmctl start` completes download, disk build, and boot
+1. `go run ./cmd/agent-vm start` completes download, disk build, and boot
 2. The GUI automatically enters the configured desktop session
 3. The host can `ssh vm@192.168.64.10`
 4. `bootstrap.done` prevents an unexpected second bootstrap

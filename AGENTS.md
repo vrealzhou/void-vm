@@ -3,10 +3,10 @@
 ## Build & Run
 
 ```bash
-go run ./cmd/vmctl          # default: start web UI on port 8080
-go run ./cmd/vmctl start    # CLI: create assets + boot VM
-go run ./cmd/vmctl status   # VM state, PID, IP, disk path
-go run ./cmd/vmctl ssh      # SSH into guest as user "vm" @ 192.168.64.10
+go run ./cmd/agent-vm          # default: start web UI on port 8080
+go run ./cmd/agent-vm start    # CLI: create assets + boot VM
+go run ./cmd/agent-vm status   # VM state, PID, IP, disk path
+go run ./cmd/agent-vm ssh      # SSH into guest as user "vm" @ 192.168.64.10
 ```
 
 No Makefile. Run the binary directly. Module: `github.com/vrealzhou/agent-vm`, Go 1.26.
@@ -24,7 +24,7 @@ E2E test requires `vfkit`, `qemu-img`, `ssh`, `podman`, and an `id_ed25519` key.
 ## Architecture
 
 ```
-cmd/vmctl/main.go          # CLI entrypoint
+cmd/agent-vm/main.go          # CLI entrypoint
 internal/vmctl/            # all Go code (config.go, yaml_config.go, vm.go, util.go, build_vfkit.go, bootstrap_script.go, web*.go, sync*.go, tunnel*.go)
 web/static/                # vanilla HTML/CSS/JS frontend (served by echo/v5)
 scripts/                   # guest-bootstrap.sh (reference), e2e-test.sh

@@ -6,7 +6,7 @@ The project is intentionally scoped to one supported workflow:
 
 - Distribution: `Void Linux aarch64 glibc`
 - Desktop: configurable, default `Sway`
-- Entry point: `go run ./cmd/vmctl <command>`
+- Entry point: `go run ./cmd/agent-vm <command>`
 - Network model: fixed IP `192.168.64.10`
 - Default user: `vm`
 - Default resources: `6 CPU / 6 GiB RAM / 100 GiB disk`
@@ -37,15 +37,15 @@ command -v vfkit qemu-img curl ssh go
 ## Quick Start
 
 ```bash
-go run ./cmd/vmctl start
+go run ./cmd/agent-vm start
 ```
 
-On first boot, `vmctl` downloads the Void rootfs tarball, builds a disk image, extracts the kernel/initramfs, boots the VM, and runs bootstrap automatically. Subsequent starts reuse the existing VM state.
+On first boot, `agent-vm` downloads the Void rootfs tarball, builds a disk image, extracts the kernel/initramfs, boots the VM, and runs bootstrap automatically. Subsequent starts reuse the existing VM state.
 
 ### Web UI
 
 ```bash
-go run ./cmd/vmctl          # open web UI at http://localhost:8080
+go run ./cmd/agent-vm          # open web UI at http://localhost:8080
 ```
 
 From the UI you can configure bootstrap preferences (shell, editor, window manager, brew/cargo packages, post-bootstrap hooks), start/stop/destroy the VM, manage sync pairs and SSH tunnels.
@@ -145,15 +145,15 @@ Default login:
 ## CLI Commands
 
 ```bash
-go run ./cmd/vmctl start       # create assets + boot VM
-go run ./cmd/vmctl stop        # stop the VM
-go run ./cmd/vmctl destroy     # stop + remove VM state
-go run ./cmd/vmctl status      # VM state, PID, IP, disk path
-go run ./cmd/vmctl ssh         # SSH into guest as user "vm"
-go run ./cmd/vmctl ip          # print guest IP
-go run ./cmd/vmctl bootstrap   # run bootstrap flow
-go run ./cmd/vmctl sync        # manage sync pairs
-go run ./cmd/vmctl tunnel      # manage SSH tunnels
+go run ./cmd/agent-vm start       # create assets + boot VM
+go run ./cmd/agent-vm stop        # stop the VM
+go run ./cmd/agent-vm destroy     # stop + remove VM state
+go run ./cmd/agent-vm status      # VM state, PID, IP, disk path
+go run ./cmd/agent-vm ssh         # SSH into guest as user "vm"
+go run ./cmd/agent-vm ip          # print guest IP
+go run ./cmd/agent-vm bootstrap   # run bootstrap flow
+go run ./cmd/agent-vm sync        # manage sync pairs
+go run ./cmd/agent-vm tunnel      # manage SSH tunnels
 ```
 
 ## Sync
@@ -162,12 +162,12 @@ File sync between host and VM — supports two modes:
 
 **copy** — rsync with backups:
 ```bash
-go run ./cmd/vmctl sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode copy
+go run ./cmd/agent-vm sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode copy
 ```
 
 **git** — bare repo on VM, host pushes/pulls via `git push vm` / `git pull vm`:
 ```bash
-go run ./cmd/vmctl sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode git
+go run ./cmd/agent-vm sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode git
 ```
 
 Sync pairs can also be configured in `vmctl.yaml` or via the web UI.
@@ -177,7 +177,7 @@ Sync pairs can also be configured in `vmctl.yaml` or via the web UI.
 SSH port forwarding between host and VM:
 
 ```bash
-go run ./cmd/vmctl tunnel add --name webapp --type local --local-port 3000 --remote-port 3000
+go run ./cmd/agent-vm tunnel add --name webapp --type local --local-port 3000 --remote-port 3000
 ```
 
 Also configurable in `vmctl.yaml` under the `tunnels:` section.
@@ -205,7 +205,7 @@ Post-bootstrap hooks run after all steps complete. Add them under `bootstrap.hoo
 
 ```bash
 rm -rf ~/.config/agent-vm/void-dev
-go run ./cmd/vmctl start
+go run ./cmd/agent-vm start
 ```
 
 ## Troubleshooting
@@ -223,7 +223,7 @@ go run ./cmd/vmctl start
 ## Code Layout
 
 ```
-cmd/vmctl/main.go              CLI entry point
+cmd/agent-vm/main.go              CLI entry point
 internal/vmctl/
   config.go                    config loading (LoadConfig/SaveConfig)
   yaml_config.go               YAML schema and parsing

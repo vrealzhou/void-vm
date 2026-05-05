@@ -511,7 +511,7 @@ func writeBootstrapMarker(cfg Config) error {
 
 func logf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Printf("[vmctl] %s\n", msg)
+	fmt.Printf("[agent-vm] %s\n", msg)
 	addProgress("%s", msg)
 }
 

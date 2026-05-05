@@ -187,7 +187,7 @@ func handleUpgradeKernel(cfg Config) echo.HandlerFunc {
 				fmt.Printf("kernel upgrade error: %v\n", err)
 			} else {
 				addProgress("kernel upgraded to %s", version)
-				fmt.Printf("[vmctl] kernel upgraded to %s\n", version)
+				fmt.Printf("[agent-vm] kernel upgraded to %s\n", version)
 			}
 		}()
 		return jsonSuccess(c, map[string]string{"message": "kernel upgrade started"})

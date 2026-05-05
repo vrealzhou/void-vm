@@ -13,8 +13,8 @@ func NewRootCommand() (*cobra.Command, error) {
 	}
 
 	rootCmd := &cobra.Command{
-		Use:           "vmctl",
-		Short:         "Manage a Void Linux dev VM with vfkit",
+		Use:           "agent-vm",
+		Short:         "Agent VM — a reproducible Void Linux dev VM on Apple Silicon",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

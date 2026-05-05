@@ -166,8 +166,8 @@ func LoadConfig() (Config, error) {
 
 func Usage(cfg Config) string {
 	return fmt.Sprintf(`Usage:
-  go run ./cmd/vmctl           # open the web UI
-  go run ./cmd/vmctl <command>
+  go run ./cmd/agent-vm           # open the web UI
+  go run ./cmd/agent-vm <command>
 
 Commands:
   start      Create missing assets and start the VM

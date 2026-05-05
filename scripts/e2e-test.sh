@@ -16,7 +16,7 @@ vmctl() {
   (
     cd "${REPO_ROOT}"
     export VMCTL_REPO_ROOT="${REPO_ROOT}"
-    go run ./cmd/vmctl "$@"
+    go run ./cmd/agent-vm "$@"
   )
 }
 
