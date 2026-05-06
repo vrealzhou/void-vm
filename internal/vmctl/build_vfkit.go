@@ -534,6 +534,10 @@ install -d -m 700 ${TARGET}/root/.ssh
 printf '%s\n' "{{.SSHPublicKey}}" > ${TARGET}/root/.ssh/authorized_keys
 chmod 600 ${TARGET}/root/.ssh/authorized_keys
 
+install -d -m 700 ${TARGET}/home/"{{.GuestUser}}"/.ssh
+printf '%s\n' "{{.SSHPublicKey}}" > ${TARGET}/home/"{{.GuestUser}}"/.ssh/authorized_keys
+chmod 600 ${TARGET}/home/"{{.GuestUser}}"/.ssh/authorized_keys
+
 mkdir -p ${TARGET}/etc/sudoers.d
 cat > ${TARGET}/etc/sudoers.d/10-vmctl <<SUDO
 %wheel ALL=(ALL) NOPASSWD: ALL
@@ -729,10 +733,6 @@ else
   echo "warning: could not resolve uid/gid for {{.GuestUser}}, skipping chown" >&2
 fi
 chown -R 0:0 ${TARGET}/root/.ssh
-
-install -d -m 700 ${TARGET}/home/"{{.GuestUser}}"/.ssh
-printf '%s\n' "{{.SSHPublicKey}}" > ${TARGET}/home/"{{.GuestUser}}"/.ssh/authorized_keys
-chmod 600 ${TARGET}/home/"{{.GuestUser}}"/.ssh/authorized_keys
 if [ -n "${guest_ids}" ]; then
   chown -R "${guest_ids}" ${TARGET}/home/"{{.GuestUser}}"/.ssh
 else
