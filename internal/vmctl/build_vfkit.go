@@ -699,7 +699,7 @@ echo "repository={{.RealRepo}}" > ${TARGET}/etc/xbps.d/00-vmctl-repository.conf
 set +euo pipefail
 
 if ! grep -q '^{{.GuestUser}}:' ${TARGET}/etc/passwd; then
-  useradd -R ${TARGET} -m -s "${guest_shell}" "{{.GuestUser}}" 2>/dev/null
+  useradd -R ${TARGET} -m -s "${guest_shell}" "{{.GuestUser}}"
   for grp in wheel audio video input _seatd; do
     grep -q "^${grp}:" ${TARGET}/etc/group && usermod -R ${TARGET} -aG "${grp}" "{{.GuestUser}}" 2>/dev/null
   done
@@ -717,15 +717,15 @@ fi
 
 printf '%s\n%s\n' "root:{{.RootPassword}}" "{{.GuestUser}}:{{.GuestPassword}}" | chpasswd -R ${TARGET} || true
 guest_ids="$(awk -F: '$1=="{{.GuestUser}}" {print $3 ":" $4}' ${TARGET}/etc/passwd)"
-if [ -z "${guest_ids}" ]; then
-  echo "failed to resolve uid/gid for {{.GuestUser}}" >&2
-  exit 1
+if [ -n "${guest_ids}" ]; then
+  chown -R "${guest_ids}" ${TARGET}/home/"{{.GuestUser}}"
+  mkdir -p ${TARGET}/home/"{{.GuestUser}}"/.local/run
+  chown "${guest_ids}" ${TARGET}/home/"{{.GuestUser}}"/.local/run
+  chmod 700 ${TARGET}/home/"{{.GuestUser}}"/.local/run
+else
+  echo "warning: could not resolve uid/gid for {{.GuestUser}}, skipping chown" >&2
 fi
 chown -R 0:0 ${TARGET}/root/.ssh
-chown -R "${guest_ids}" ${TARGET}/home/"{{.GuestUser}}"
-mkdir -p ${TARGET}/home/"{{.GuestUser}}"/.local/run
-chown "${guest_ids}" ${TARGET}/home/"{{.GuestUser}}"/.local/run
-chmod 700 ${TARGET}/home/"{{.GuestUser}}"/.local/run
 
 install -d -m 700 ${TARGET}/home/"{{.GuestUser}}"/.ssh
 printf '%s\n' "{{.SSHPublicKey}}" > ${TARGET}/home/"{{.GuestUser}}"/.ssh/authorized_keys
