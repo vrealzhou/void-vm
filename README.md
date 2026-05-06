@@ -133,10 +133,11 @@ On first boot, `agent-vm` downloads the Void rootfs tarball, builds a disk image
 ### Web UI
 
 ```bash
-agent-vm            # open web UI at http://localhost:8080
+agent-vm             # open web UI at http://localhost:8080
+agent-vm -p 9090     # custom port
 ```
 
-From the UI you can configure bootstrap preferences (shell, editor, window manager, brew/cargo packages, post-bootstrap hooks), start/stop/destroy the VM, manage sync pairs and SSH tunnels.
+The web UI is embedded in the binary — no repo needed. From the UI you can configure bootstrap preferences (shell, editor, window manager, brew/cargo packages, post-bootstrap hooks), start/stop/destroy the VM, manage sync pairs and SSH tunnels.
 
 ## Default Layout
 
