@@ -852,6 +852,7 @@ main() {
 {{end}}
   fix_ownership
   set_default_shell
+  mkdir -p ${TARGET_HOME}/repos ${TARGET_HOME}/projects
 {{if .ExtraCommands}}
   log "running extra bootstrap commands..."
   bash -lc "{{.ExtraCommands}}" || true
