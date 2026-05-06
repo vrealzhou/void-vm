@@ -23,7 +23,6 @@ func NewRootCommand() (*cobra.Command, error) {
 		},
 	}
 	rootCmd.Flags().StringP("port", "p", "", "web UI port (default: 8080)")
-	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	defaultHelp := rootCmd.HelpFunc()
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if cmd == rootCmd {
