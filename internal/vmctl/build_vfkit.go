@@ -505,7 +505,7 @@ if [ -d /usr/share/xbps.d/keys ]; then
   cp -a /usr/share/xbps.d/keys/. ${TARGET}/usr/share/xbps.d/keys/
 fi
 
-retry_xbps "DRACUT_NO_XATTR=1 xbps-install -y -R ${REPO} -Suy --root=${TARGET} base-system linux6.12 dracut openssh NetworkManager dbus fish-shell zsh curl wget git unzip bash file sudo chrony neovim helix"
+retry_xbps "DRACUT_NO_XATTR=1 xbps-install -y -R ${REPO} -Suy --root=${TARGET} base-system linux6.12 dracut openssh NetworkManager dbus fish-shell zsh curl wget git unzip bash file sudo chrony neovim helix docker make"
 
 retry_xbps "xbps-install -y -R ${REPO} -Suy --root=${TARGET} seatd sway foot ghostty ghostty-terminfo mesa mesa-dri wl-clipboard wofi mako grim slurp xdg-desktop-portal-wlr xorg xfce4 xfce4-terminal fcitx5 fcitx5-chinese-addons fcitx5-configtool fcitx5-gtk+2 fcitx5-gtk+3 fcitx5-gtk4 fcitx5-qt5 fcitx5-qt6 noto-fonts-cjk noto-fonts-emoji font-sarasa-gothic"
 
@@ -661,7 +661,7 @@ BARSTATUSEOF
 chmod 0755 ${TARGET}/usr/local/bin/vmctl-swaybar-status
 
 mkdir -p ${TARGET}/etc/runit/runsvdir/default
-for svc in dbus sshd NetworkManager seatd chronyd; do
+for svc in dbus sshd NetworkManager seatd chronyd docker; do
   if [ -d "${TARGET}/etc/sv/${svc}" ]; then
     ln -snf "/etc/sv/${svc}" "${TARGET}/etc/runit/runsvdir/default/${svc}"
   fi
@@ -707,7 +707,7 @@ set +euo pipefail
 
 if ! grep -q '^{{.GuestUser}}:' ${TARGET}/etc/passwd; then
   useradd -R ${TARGET} -m -s "${guest_shell}" "{{.GuestUser}}"
-  for grp in wheel audio video input _seatd; do
+  for grp in wheel audio video input _seatd docker; do
     grep -q "^${grp}:" ${TARGET}/etc/group && usermod -R ${TARGET} -aG "${grp}" "{{.GuestUser}}" 2>/dev/null
   done
 else
