@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A single-command, reproducible `arm64` Void Linux development VM on Apple Silicon macOS using `vfkit`.
+A single-command, reproducible `arm64` Void Linux development VM on Apple Silicon macOS — managed entirely from a web UI.
 
 - Distribution: `Void Linux aarch64 glibc`
 - Desktop: configurable, default `Sway`
@@ -14,8 +14,6 @@ A single-command, reproducible `arm64` Void Linux development VM on Apple Silico
 
 **Platform:** Apple Silicon macOS only. `vfkit` uses Apple's Virtualization framework.
 
-_Windows/Linux support would require replacing vfkit with QEMU. The disk image, kernel, and initrd are platform-agnostic — only the hypervisor layer needs changing. See `internal/vmctl/vm.go` (vfkitArgs) and `build_vfkit.go` (buildVoidLinuxDiskVFKit) for the integration points._
-
 ```bash
 vfkit
 qemu-img
@@ -24,11 +22,9 @@ ssh
 go
 ```
 
-Optional (fallback disk builder):
+Optional fallback disk builder: `podman`.
 
-```bash
-podman
-```
+_Windows/Linux support would require replacing vfkit with QEMU. The disk image, kernel, and initrd are platform-agnostic — only the hypervisor layer needs changing._
 
 Quick check:
 
@@ -42,26 +38,33 @@ command -v vfkit qemu-img curl ssh go
 go install github.com/vrealzhou/agent-vm/cmd/agent-vm@latest
 ```
 
-Then run from anywhere:
+## Usage
+
+The web UI is the primary interface — everything from first boot to daily management:
 
 ```bash
-agent-vm start
-agent-vm ssh
-agent-vm status
+agent-vm             # open http://localhost:8080
+agent-vm -p 9090     # custom port
 ```
 
-Or run directly from the repo:
+The web UI is embedded in the binary. From it you can:
+
+- **Bootstrap**: configure shell, editor, window manager, brew/cargo packages, and post-bootstrap hooks
+- **VM control**: start, stop, destroy with live progress streaming and guest resource metrics
+- **Sync**: set up file sync pairs (rsync or git) between host and VM
+- **Tunnels**: manage SSH port forwarding
+
+After bootstrap completes, the VM boots into the configured desktop session. Connect via SSH:
 
 ```bash
-go run ./cmd/agent-vm <command>
+ssh vm@192.168.64.10
 ```
 
 ## Configuration
 
-All config lives in `~/.config/agent-vm/vmctl.yaml`. Override the config directory with `VMCTL_CONFIG_DIR`.
+All config lives in `~/.config/agent-vm/vmctl.yaml`. Override the directory with `VMCTL_CONFIG_DIR`. Every key is optional — defaults apply for anything omitted.
 
 ```yaml
-# example vmctl.yaml
 vm:
   name: void-dev
   cpus: 6
@@ -122,49 +125,6 @@ tunnels:
     remote_port: 3000
 ```
 
-Every key is optional — defaults apply for anything omitted.
-
-## Quick Start
-
-```bash
-agent-vm start
-```
-
-On first boot, `agent-vm` downloads the Void rootfs tarball, builds a disk image, extracts the kernel/initramfs, boots the VM, and runs bootstrap automatically. Subsequent starts reuse the existing VM state.
-
-### Web UI
-
-```bash
-agent-vm             # open web UI at http://localhost:8080
-agent-vm -p 9090     # custom port
-```
-
-The web UI is embedded in the binary — no repo needed. From the UI you can configure bootstrap preferences (shell, editor, window manager, brew/cargo packages, post-bootstrap hooks), start/stop/destroy the VM, manage sync pairs and SSH tunnels.
-
-## Default Layout
-
-```
-~/.config/agent-vm/
-├── vmctl.yaml
-├── scripts/
-│   └── guest-bootstrap.sh   # generated at bootstrap time
-├── images/                  # base Void rootfs tarballs
-└── void-dev/                # runtime state
-    ├── disk.img
-    ├── vmlinuz
-    ├── initramfs.img
-    ├── bootstrap.done
-    ├── vfkit.log
-    ├── serial.log
-    └── vfkit.pid
-```
-
-Default login:
-
-- User `vm` / password `dev`
-- Root password `root`
-- SSH key auto-detected from `~/.ssh/id_ed25519.pub`
-
 ## CLI Commands
 
 ```bash
@@ -173,60 +133,32 @@ agent-vm stop        # stop the VM
 agent-vm destroy     # stop + remove VM state
 agent-vm status      # VM state, PID, IP, disk path
 agent-vm ssh         # SSH into guest as user "vm"
-agent-vm ip          # print guest IP
+agent-vm ip          # print or set guest IP
 agent-vm bootstrap   # run bootstrap flow
 agent-vm sync        # manage sync pairs
 agent-vm tunnel      # manage SSH tunnels
+agent-vm help        # show all commands
 ```
-
-## Sync
-
-File sync between host and VM — supports two modes:
-
-**copy** — rsync with backups:
-
-```bash
-agent-vm sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode copy
-```
-
-**git** — bare repo on VM, host pushes/pulls via `git push vm` / `git pull vm`:
-
-```bash
-agent-vm sync add --host-path /Users/me/projects/foo --target-path /home/vm/foo --mode git
-```
-
-Sync pairs can also be configured in `vmctl.yaml` or via the web UI.
-
-## Tunnels
-
-SSH port forwarding between host and VM:
-
-```bash
-agent-vm tunnel add --name webapp --type local --local-port 3000 --remote-port 3000
-```
-
-Also configurable in `vmctl.yaml` under the `tunnels:` section.
 
 ## Networking
 
-The VM runs behind vfkit NAT. Fixed IP `192.168.64.10/24`, gateway `192.168.64.1`. The host is reachable from inside the guest as `host.vm` — resolves to the gateway IP, so `curl http://host.vm:8080` from the VM reaches the host.
+The VM runs behind vfkit NAT. Fixed IP `192.168.64.10/24`, gateway `192.168.64.1`. The host is reachable from inside the guest as `host.vm` — resolves to the gateway IP:
+
+```bash
+curl http://host.vm:8080/api/status
+```
 
 ## Guest Bootstrap
 
-Bootstrap configures inside the VM:
+Bootstrap configures inside the VM automatically on first boot:
 
-- `fish` or `zsh` shell
-- `starship` prompt
-- `fnm` for Node.js
-- `Rust` and `cargo`
-- `Homebrew for Linux`
-- `Neovim` or `Helix`
+- `fish` or `zsh` shell with `starship` prompt
+- `fnm` for Node.js, `Rust` and `cargo`
+- `Homebrew for Linux`, `Neovim` or `Helix`
 - `Zellij`, `Zig`, `lazygit`, `opencode`
-- `Ghostty` terminal
-- `Chromium` and `Zen Browser`
+- `Ghostty` terminal, `Chromium`, `Zen Browser`
 - `Fcitx5` Chinese input
-- `~/.gitconfig`
-- Autologin to desktop session
+- `~/.gitconfig`, autologin to desktop session
 
 Post-bootstrap hooks run after all steps complete. Add them under `bootstrap.hooks` in `vmctl.yaml`.
 
@@ -245,26 +177,11 @@ agent-vm start
 
 ### VPN breaks SSH to VM
 
-Cisco AnyConnect and similar VPNs redirect all traffic including local subnets. The VM becomes unreachable at `192.168.64.10`. Fix by adding a static route that bypasses the VPN:
+Cisco AnyConnect and similar VPNs redirect all traffic including local subnets:
 
 ```bash
-# find the bridge interface (usually bridge100)
 BRIDGE=$(ifconfig | grep -B1 "192.168.64" | head -1 | awk '{print $1}' | sed 's/:$//')
-
-# route VM subnet through vfkit's bridge, not the VPN
 sudo route -n add -net 192.168.64.0/24 -interface "$BRIDGE"
-```
-
-Verify:
-
-```bash
-ssh vm@192.168.64.10
-```
-
-## E2E Test
-
-```bash
-./scripts/e2e-test.sh
 ```
 
 ## Code Layout
@@ -272,16 +189,11 @@ ssh vm@192.168.64.10
 ```
 cmd/agent-vm/main.go              CLI entry point
 internal/vmctl/
-  config.go                    config loading (LoadConfig/SaveConfig)
-  yaml_config.go               YAML schema and parsing
-  vm.go                        VM lifecycle (start/stop/destroy/bootstrap)
-  build_vfkit.go               vfkit-based Void disk builder
-  util.go                      shared helpers
-  bootstrap_script.go          guest bootstrap script generator
-  web.go / web_handlers.go     Echo v5 web server + REST API
-  sync_config.go / sync_*.go   sync pair management
-  tunnel_config.go / tunnel_*.go  SSH tunnel management
-web/static/                    vanilla HTML/CSS/JS frontend
-scripts/
-  e2e-test.sh                  end-to-end test
+  config.go / yaml_config.go      config loading and YAML schema
+  vm.go / build_vfkit.go          VM lifecycle and disk builder
+  util.go / bootstrap_script.go   helpers and bootstrap generator
+  web.go / web_handlers.go        Echo v5 web server + REST API
+  sync_*.go / tunnel_*.go         sync pair and tunnel management
+web/static/                       embedded web UI
+scripts/e2e-test.sh               end-to-end test
 ```
