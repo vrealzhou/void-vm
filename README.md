@@ -1,5 +1,7 @@
 # Agent VM
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A single-command, reproducible `arm64` Void Linux development VM on Apple Silicon macOS using `vfkit`.
 
 - Distribution: `Void Linux aarch64 glibc`
