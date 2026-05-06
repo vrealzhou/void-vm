@@ -166,8 +166,11 @@ func LoadConfig() (Config, error) {
 
 func Usage(cfg Config) string {
 	return fmt.Sprintf(`Usage:
-  go run ./cmd/agent-vm           # open the web UI
-  go run ./cmd/agent-vm <command>
+  agent-vm                  # open the web UI
+  agent-vm [options] <command>
+
+Options:
+  -p, --port <port>         Web UI port (default: 8080, env: VM_MANAGER_PORT)
 
 Commands:
   start      Create missing assets and start the VM
@@ -176,8 +179,6 @@ Commands:
   status     Show VM state and effective network target
   gui        Open the web VM control panel
   bootstrap  Run the guided bootstrap flow and write bootstrap.done
-  clip-in    Copy the macOS clipboard into the guest Wayland clipboard
-  clip-out   Copy the guest Wayland clipboard into the macOS clipboard
   ssh        SSH into the guest using the configured static IP
   ip         Print the configured guest IP
   sync       Manage file sync pairs between host and VM
