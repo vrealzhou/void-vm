@@ -733,6 +733,11 @@ chown -R 0:0 ${TARGET}/root/.ssh
 install -d -m 700 ${TARGET}/home/"{{.GuestUser}}"/.ssh
 printf '%s\n' "{{.SSHPublicKey}}" > ${TARGET}/home/"{{.GuestUser}}"/.ssh/authorized_keys
 chmod 600 ${TARGET}/home/"{{.GuestUser}}"/.ssh/authorized_keys
+if [ -n "${guest_ids}" ]; then
+  chown -R "${guest_ids}" ${TARGET}/home/"{{.GuestUser}}"/.ssh
+else
+  chown -R "{{.GuestUser}}:{{.GuestUser}}" ${TARGET}/home/"{{.GuestUser}}"/.ssh 2>/dev/null || true
+fi
 
 cat > ${TARGET}/home/"{{.GuestUser}}"/.bash_profile <<'BASHPROF'
 export XDG_RUNTIME_DIR="${HOME}/.local/run"
