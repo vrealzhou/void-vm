@@ -409,7 +409,6 @@ GITEOF
     } >>"${TARGET_HOME}/.gitconfig"
   fi
 }
-{{if eq .DefaultShell "fish"}}
 write_fish_config() {
   mkdir -p "${FISH_CONFIG_DIR}/conf.d"
   cat >"${FISH_CONFIG_SNIPPET}" <<FISHEOF
@@ -451,8 +450,6 @@ if status is-interactive
 end
 FISHEOF
 }
-{{end}}
-{{if eq .DefaultShell "zsh"}}
 write_zsh_config() {
   cat >"${ZSHRC_PATH}" <<ZSHEOF
 export COLORTERM=truecolor
@@ -489,8 +486,6 @@ if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ] && [ "$(tty 2>/dev/nul
 fi
 ZSHEOF
 }
-{{end}}
-
 write_bash_profile() {
   cat >"${BASH_PROFILE_PATH}" <<'BASHEOF'
 export XDG_RUNTIME_DIR="${HOME}/.local/run"
@@ -839,14 +834,10 @@ main() {
   cleanup_legacy_prompt_config
   write_starship_config
   write_git_config
-{{if eq .DefaultShell "fish"}}
   write_fish_config
   write_fish_autostart
-{{end}}
-{{if eq .DefaultShell "zsh"}}
   write_zsh_config
   write_zsh_autostart
-{{end}}
   write_bash_profile
   write_fcitx_config
   write_fcitx_profile
