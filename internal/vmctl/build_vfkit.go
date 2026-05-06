@@ -438,7 +438,7 @@ type buildVMScriptData struct {
 	SSHPublicKey  string
 }
 
-func buildVMScript(cfg Config, realVoidRepo string) string {
+func buildVMScript(cfg Config, realVoidRepo string) (string, error) {
 	data := buildVMScriptData{
 		Repo:          strings.TrimRight(cfg.VoidRepository, "/") + "/current/aarch64",
 		RealRepo:      strings.TrimRight(realVoidRepo, "/") + "/current/aarch64",
@@ -454,7 +454,10 @@ func buildVMScript(cfg Config, realVoidRepo string) string {
 		DNS:           strings.ReplaceAll(cfg.DNSServers, ",", ";"),
 		Timezone:      cfg.Timezone,
 	}
-	pubKey, _ := os.ReadFile(cfg.SSHPublicKey)
+	pubKey, err := os.ReadFile(cfg.SSHPublicKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to read SSH public key %s: %w", cfg.SSHPublicKey, err)
+	}
 	if pubKey != nil {
 		data.SSHPublicKey = strings.TrimSpace(string(pubKey))
 	}
@@ -935,7 +938,7 @@ echo "BUILD_SUCCESS"
 	if err := t.Execute(&buf, data); err != nil {
 		panic(err)
 	}
-	return buf.String()
+	return buf.String(), nil
 }
 
 func buildVoidLinuxDiskVFKit(cfg Config) error {
@@ -1076,7 +1079,7 @@ func buildVoidLinuxDiskVFKit(cfg Config) error {
 	proxyPort := proxyAddr[strings.LastIndexByte(proxyAddr, ':')+1:]
 	scriptCfg := cfg
 	scriptCfg.VoidRepository = "http://192.168.64.1:" + proxyPort
-	script := buildVMScript(scriptCfg, cfg.VoidRepository)
+	script, err := buildVMScript(scriptCfg, cfg.VoidRepository); if err != nil { return fmt.Errorf("failed to generate build script: %w", err) }
 	sshArgs := sshArgsForUser(buildCfg, "root")
 	sshCmd := exec.Command("ssh", append(sshArgs, "bash -s")...)
 	sshCmd.Stdin = strings.NewReader(script)

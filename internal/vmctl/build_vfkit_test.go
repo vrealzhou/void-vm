@@ -211,6 +211,9 @@ func TestDownloadBuildKernel(t *testing.T) {
 }
 
 func TestBuildVMScript(t *testing.T) {
+	tmpKey := filepath.Join(t.TempDir(), "test.pub")
+	os.WriteFile(tmpKey, []byte("ssh-ed25519 AAAAtest"), 0o644)
+
 	cfg := Config{
 		VoidRepository: "https://repo-default.voidlinux.org",
 		Name:           "test-vm",
@@ -224,9 +227,10 @@ func TestBuildVMScript(t *testing.T) {
 		Gateway:        "192.168.64.1",
 		DNSServers:     "1.1.1.1,8.8.8.8",
 		Timezone:       "Australia/Sydney",
+		SSHPublicKey:   tmpKey,
 	}
 
-	script := buildVMScript(cfg, cfg.VoidRepository)
+	script, err := buildVMScript(cfg, cfg.VoidRepository); if err != nil { t.Fatal(err) }
 
 	wantRepo := "https://repo-default.voidlinux.org/current"
 	if !strings.Contains(script, wantRepo) {
