@@ -153,13 +153,24 @@ func newSSHCommand(cfg Config) *cobra.Command {
 }
 
 func newIPCommand(cfg Config) *cobra.Command {
-	return &cobra.Command{
+	var setIP string
+	cmd := &cobra.Command{
 		Use:   "ip",
-		Short: "Print the configured guest IP",
+		Short: "Print or set the guest IP address",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if setIP != "" {
+				cfg.StaticIP = setIP
+				if err := SaveConfig(cfg); err != nil {
+					return fmt.Errorf("failed to save config: %w", err)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "IP updated to %s\n", setIP)
+				return nil
+			}
 			fmt.Fprintln(cmd.OutOrStdout(), cfg.StaticIP)
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&setIP, "set", "", "set guest IP address in vmctl.yaml")
+	return cmd
 }

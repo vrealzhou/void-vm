@@ -180,7 +180,7 @@ Commands:
   gui        Open the web VM control panel
   bootstrap  Run the guided bootstrap flow and write bootstrap.done
   ssh        SSH into the guest using the configured static IP
-  ip         Print the configured guest IP
+  ip         Print or set the configured guest IP (--set)
   sync       Manage file sync pairs between host and VM
   tunnel     Manage SSH tunnels
 
