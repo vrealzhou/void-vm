@@ -243,7 +243,20 @@ func BootstrapSetup(cfg Config) error {
 		return err
 	}
 	addProgress("bootstrap setup complete")
-	return writeBootstrapMarker(cfg)
+	if err := writeBootstrapMarker(cfg); err != nil {
+		return err
+	}
+	addProgress("restarting VM to apply bootstrap changes...")
+	_ = rebootVM(cfg)
+	return nil
+}
+
+func rebootVM(cfg Config) error {
+	cmd := exec.Command("ssh", append(sshArgs(cfg), "reboot")...)
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	return waitForSSH(cfg, cfg.SSHUser, 2*time.Minute)
 }
 
 func UpgradeKernel(cfg Config) (string, error) {
