@@ -144,9 +144,14 @@ func newClipOutCommand(cfg Config) *cobra.Command {
 func newSSHCommand(cfg Config) *cobra.Command {
 	return &cobra.Command{
 		Use:                "ssh [ssh args...]",
-		Short:              "SSH into the guest using the configured static IP",
+		Short:              "SSH into the guest using the configured static IP (vm@" + cfg.StaticIP + ")",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			for _, a := range args {
+				if a == "--help" || a == "-h" {
+					return cmd.Help()
+				}
+			}
 			return SSH(cfg, args)
 		},
 	}
