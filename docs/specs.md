@@ -80,18 +80,9 @@ guest:
   window_manager: sway
 
 bootstrap:
-  brew_packages:
-    - helix
-    - zellij
-    - zig
-    - opencode
-    - lazygit
-    - gitui
-  cargo_packages:
-    - crate: fresh-editor
-      command: fresh
-  hooks:
-    - "echo bootstrap complete"
+  hook_scripts:
+    - ~/.config/agent-vm/hooks/install-rust.sh
+    - ~/.config/agent-vm/hooks/install-packages.sh
 
 git:
   user_name: ""
@@ -138,14 +129,22 @@ Bootstrap runs automatically on first boot. It is a shell script generated from 
 
 Bootstrap completion is tracked by a `bootstrap.done` marker. Subsequent VM starts skip bootstrap.
 
-### 4.2 Bootstrap Packages
+### 4.2 Bootstrap Scope
 
-- **brew_packages**: YAML list of Homebrew formula names. Each installed via `brew install`.
-- **cargo_packages**: YAML list of objects with `crate` (Cargo crate name) and `command` (executable checked before install). If `command` is omitted, defaults to `crate`.
+The agent-vm bootstrap installs only essential infrastructure:
+- Homebrew for Linux
+- Docker with docker-compose and docker-buildx plugins
+- Selected shell (fish/zsh), editor (neovim/helix), and window manager (sway/xfce)
+- Rust toolchain (rustup + stable), fnm + Node.js, Starship prompt
+- Browsers (Chromium, Zen Browser)
+- Fcitx5 Chinese input, Ghostty terminal
 
-### 4.3 Post-Bootstrap Hooks
+All other developer tools (zellij, zig, lazygit, gitui, opencode, cargo crates, etc.) should be installed via user-provided hook scripts.
 
-A list of inline shell commands under `bootstrap.hooks`. Execute once after all bootstrap steps succeed, as the target user inside the guest. They do not run on subsequent VM restarts.
+### 4.3 Post-Bootstrap Hook Scripts
+
+- **hook_scripts**: YAML list of paths to shell scripts on the host. Each file is read and its content is appended and executed as a post-bootstrap hook inside the guest. These do not run on subsequent VM restarts.
+- CLI: `agent-vm bootstrap --hook script1.sh --hook script2.sh` (repeatable `--hook` flag)
 
 ## 5. Boot And System Behavior
 
@@ -210,7 +209,7 @@ SSH port forwarding managed under `tunnels:` in `vmctl.yaml`. Supports local and
 Running `go run ./cmd/agent-vm` without a subcommand starts the web UI on port 8080 (`VM_MANAGER_PORT`).
 
 The UI provides:
-- Bootstrap configuration (shell, editor, WM, packages, hooks, git identity)
+- Bootstrap configuration (shell, editor, WM, hook scripts, git identity)
 - VM start/stop/destroy with progress streaming
 - Guest CPU/memory metrics
 - Sync pair management

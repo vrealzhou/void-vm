@@ -3,6 +3,7 @@ package vmctl
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -47,9 +48,7 @@ func handleStatus(cfg Config) echo.HandlerFunc {
 				"memoryMiB":     cfg.MemoryMiB,
 				"diskSize":      cfg.DiskSize,
 				"staticIP":      cfg.StaticIP,
-				"brewPackages":  strings.Fields(cfg.BootstrapBrewPackages),
-				"cargoPackages": parseCargoPackagesForWeb(cfg.BootstrapCargoPackages),
-				"hooks":         cfg.BootstrapExtraCommands,
+				"hookScripts": cfg.BootstrapHookScripts,
 				"userName":      cfg.GitUserName,
 				"userEmail":     cfg.GitUserEmail,
 			},
@@ -64,10 +63,8 @@ func handleBootstrap(cfg Config) echo.HandlerFunc {
 		WindowManager string `json:"windowManager"`
 		MemoryMiB     int    `json:"memoryMiB"`
 		DiskSize      string `json:"diskSize"`
-		StaticIP      string `json:"staticIP"`
-		BrewPackages  string `json:"brewPackages"`
-		CargoPackages string `json:"cargoPackages"`
-		Hooks         string `json:"hooks"`
+		StaticIP     string   `json:"staticIP"`
+		HookScripts  []string `json:"hookScripts"`
 		UserName      string `json:"userName"`
 		UserEmail     string `json:"userEmail"`
 	}
@@ -76,7 +73,6 @@ func handleBootstrap(cfg Config) echo.HandlerFunc {
 		if err := c.Bind(&req); err != nil {
 			return jsonError(c, http.StatusBadRequest, "invalid request")
 		}
-		// Write preferences to YAML config
 		newCfg, err := LoadConfig()
 		if err != nil {
 			return jsonError(c, http.StatusInternalServerError, err.Error())
@@ -90,12 +86,6 @@ func handleBootstrap(cfg Config) echo.HandlerFunc {
 		if req.WindowManager != "" {
 			newCfg.WindowManager = req.WindowManager
 		}
-		if req.BrewPackages != "" {
-			newCfg.BootstrapBrewPackages = req.BrewPackages
-		}
-		if req.CargoPackages != "" {
-			newCfg.BootstrapCargoPackages = req.CargoPackages
-		}
 		if req.MemoryMiB > 0 {
 			newCfg.MemoryMiB = req.MemoryMiB
 		}
@@ -105,8 +95,20 @@ func handleBootstrap(cfg Config) echo.HandlerFunc {
 		if req.StaticIP != "" {
 			newCfg.StaticIP = req.StaticIP
 		}
-		if req.Hooks != "" {
-			newCfg.BootstrapExtraCommands = req.Hooks
+		if len(req.HookScripts) > 0 {
+			var parts []string
+			for _, path := range req.HookScripts {
+				content, err := os.ReadFile(path)
+				if err != nil {
+					return jsonError(c, http.StatusBadRequest, fmt.Sprintf("failed to read hook script %s: %v", path, err))
+				}
+				parts = append(parts, string(content))
+			}
+			newCfg.BootstrapHookScripts = req.HookScripts
+			if newCfg.BootstrapExtraCommands != "" {
+				newCfg.BootstrapExtraCommands += "\n"
+			}
+			newCfg.BootstrapExtraCommands += strings.Join(parts, "\n")
 		}
 		if req.UserName != "" {
 			newCfg.GitUserName = req.UserName
@@ -489,24 +491,4 @@ func handleSyncHistory(cfg Config) echo.HandlerFunc {
 		}
 		return jsonSuccess(c, backups)
 	}
-}
-
-func parseCargoPackagesForWeb(raw string) []map[string]string {
-	var result []map[string]string
-	if raw == "" {
-		return result
-	}
-	for _, entry := range strings.Split(raw, ",") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		parts := strings.SplitN(entry, ":", 2)
-		m := map[string]string{"crate": parts[0]}
-		if len(parts) == 2 {
-			m["command"] = parts[1]
-		}
-		result = append(result, m)
-	}
-	return result
 }

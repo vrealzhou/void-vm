@@ -49,7 +49,7 @@ agent-vm -p 9090     # custom port
 
 The web UI is embedded in the binary. From it you can:
 
-- **Bootstrap**: configure shell, editor, window manager, brew/cargo packages, and post-bootstrap hooks
+- **Bootstrap**: configure shell, editor, window manager, and hook scripts
 - **VM control**: start, stop, destroy with live progress streaming and guest resource metrics
 - **Sync**: set up file sync pairs (rsync or git) between host and VM
 - **Tunnels**: manage SSH port forwarding
@@ -94,18 +94,9 @@ guest:
   window_manager: sway
 
 bootstrap:
-  brew_packages:
-    - helix
-    - zellij
-    - zig
-    - opencode
-    - lazygit
-    - gitui
-  cargo_packages:
-    - crate: fresh-editor
-      command: fresh
-  hooks:
-    - "echo bootstrap complete"
+  hook_scripts:
+    - /Users/me/.config/agent-vm/hooks/install-rust.sh
+    - /Users/me/.config/agent-vm/hooks/install-packages.sh
 
 git:
   user_name: ""
@@ -134,7 +125,7 @@ agent-vm destroy     # stop + remove VM state
 agent-vm status      # VM state, PID, IP, disk path
 agent-vm ssh         # SSH into guest as user "vm"
 agent-vm ip          # print or set guest IP
-agent-vm bootstrap   # run bootstrap flow
+agent-vm bootstrap   # run bootstrap flow (--hook script.sh, repeatable)
 agent-vm sync        # manage sync pairs
 agent-vm tunnel      # manage SSH tunnels
 agent-vm help        # show all commands
@@ -152,15 +143,27 @@ curl http://host.vm:8080/api/status
 
 Bootstrap configures inside the VM automatically on first boot:
 
-- `fish` or `zsh` shell with `starship` prompt
-- `fnm` for Node.js, `Rust` and `cargo`
-- `Homebrew for Linux`, `Neovim` or `Helix`
-- `Zellij`, `Zig`, `lazygit`, `opencode`
+- `fish` or `zsh` shell, `Neovim` or `Helix`, `sway` or `xfce` WM
+- `fnm` for Node.js, `Homebrew for Linux`
+- `Docker` with `docker-compose` and `docker-buildx` plugins
 - `Ghostty` terminal, `Chromium`, `Zen Browser`
 - `Fcitx5` Chinese input
 - `~/.gitconfig`, autologin to desktop session
 
-Post-bootstrap hooks run after all steps complete. Add them under `bootstrap.hooks` in `vmctl.yaml`.
+Additional tools (Rust, Starship, fonts, packages) are installed via **hook scripts** — `.sh` files you write and reference in config or pass via CLI.
+
+Config:
+```yaml
+bootstrap:
+  hook_scripts:
+    - ~/.config/agent-vm/hooks/install-rust.sh
+    - ~/.config/agent-vm/hooks/install-packages.sh
+```
+
+CLI (repeatable):
+```bash
+agent-vm bootstrap --hook install-rust.sh --hook install-packages.sh
+```
 
 ## Rebuild
 

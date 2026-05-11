@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -108,14 +109,27 @@ func newGUICommand(cfg Config) *cobra.Command {
 }
 
 func newBootstrapCommand(cfg Config) *cobra.Command {
-	return &cobra.Command{
+	var hookFiles []string
+	cmd := &cobra.Command{
 		Use:   "bootstrap",
-		Short: "Configure fish + Starship + Rust + Homebrew + desktop tools inside the guest over SSH",
-		Args: leafArgs,
+		Short: "Configure fish + Homebrew + Docker + desktop tools inside the guest over SSH",
+		Args:  leafArgs,
 		RunE: leafRunE(func(cmd *cobra.Command, args []string) error {
+			for _, path := range hookFiles {
+				content, err := os.ReadFile(path)
+				if err != nil {
+					return fmt.Errorf("failed to read hook file %q: %w", path, err)
+				}
+				if cfg.BootstrapExtraCommands != "" {
+					cfg.BootstrapExtraCommands += "\n"
+				}
+				cfg.BootstrapExtraCommands += string(content)
+			}
 			return BootstrapSetup(cfg)
 		}),
 	}
+	cmd.Flags().StringArrayVar(&hookFiles, "hook", nil, "path to a shell script to execute as a post-bootstrap hook (repeatable)")
+	return cmd
 }
 
 func newClipInCommand(cfg Config) *cobra.Command {

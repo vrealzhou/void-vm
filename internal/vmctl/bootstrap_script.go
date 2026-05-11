@@ -8,22 +8,19 @@ import (
 )
 
 type bootstrapScriptData struct {
-	GuestUser              string
-	GuestHome              string
-	DefaultShell           string
-	DefaultEditor          string
-	EditorCmd              string
-	WindowManager          string
-	StarshipPresetURL      string
-	HomebrewPrefix         string
-	BootstrapBrewPackages  string
-	BootstrapCargoPackages string
-	GitUserName            string
-	GitUserEmail           string
-	Timezone               string
-	VoidRepoURL            string
-	ExtraCommands          string
-	SetDefaultShell        bool
+	GuestUser      string
+	GuestHome      string
+	DefaultShell   string
+	DefaultEditor  string
+	EditorCmd      string
+	WindowManager  string
+	HomebrewPrefix string
+	GitUserName    string
+	GitUserEmail   string
+	Timezone       string
+	VoidRepoURL    string
+	ExtraCommands  string
+	SetDefaultShell bool
 }
 
 func editorCmd(editor string) string {
@@ -37,22 +34,19 @@ func editorCmd(editor string) string {
 
 func generateBootstrapScript(cfg Config) (string, error) {
 	data := bootstrapScriptData{
-		GuestUser:              cfg.GuestUser,
-		GuestHome:              "/home/" + cfg.GuestUser,
-		DefaultShell:           cfg.DefaultShell,
-		DefaultEditor:          cfg.DefaultEditor,
-		EditorCmd:              editorCmd(cfg.DefaultEditor),
-		WindowManager:          cfg.WindowManager,
-		StarshipPresetURL:      cfg.StarshipPresetURL,
-		HomebrewPrefix:         "/home/linuxbrew/.linuxbrew",
-		BootstrapBrewPackages:  cfg.BootstrapBrewPackages,
-		BootstrapCargoPackages: cfg.BootstrapCargoPackages,
-		GitUserName:            cfg.GitUserName,
-		GitUserEmail:           cfg.GitUserEmail,
-		Timezone:               cfg.Timezone,
-		VoidRepoURL:            strings.TrimRight(cfg.VoidRepository, "/") + "/current/aarch64",
-		ExtraCommands:          strings.ReplaceAll(cfg.BootstrapExtraCommands, "\n", " && "),
-		SetDefaultShell:        cfg.SetDefaultShell,
+		GuestUser:      cfg.GuestUser,
+		GuestHome:      "/home/" + cfg.GuestUser,
+		DefaultShell:   cfg.DefaultShell,
+		DefaultEditor:  cfg.DefaultEditor,
+		EditorCmd:      editorCmd(cfg.DefaultEditor),
+		WindowManager:  cfg.WindowManager,
+		HomebrewPrefix: "/home/linuxbrew/.linuxbrew",
+		GitUserName:    cfg.GitUserName,
+		GitUserEmail:   cfg.GitUserEmail,
+		Timezone:       cfg.Timezone,
+		VoidRepoURL:    strings.TrimRight(cfg.VoidRepository, "/") + "/current/aarch64",
+		ExtraCommands:  cfg.BootstrapExtraCommands,
+		SetDefaultShell: cfg.SetDefaultShell,
 	}
 
 	t := template.Must(template.New("bootstrap").Parse(bootstrapTemplate))
@@ -73,16 +67,12 @@ DEFAULT_SHELL="{{.DefaultShell}}"
 DEFAULT_EDITOR="{{.DefaultEditor}}"
 EDITOR_CMD="{{.EditorCmd}}"
 WINDOW_MANAGER="{{.WindowManager}}"
-STARSHIP_PRESET_URL="{{.StarshipPresetURL}}"
 HOMEBREW_PREFIX="{{.HomebrewPrefix}}"
 BOOTSTRAP_XBPS_REPOSITORY="{{.VoidRepoURL}}"
 BOOTSTRAP_TIMEZONE="{{.Timezone}}"
-BOOTSTRAP_BREW_PACKAGES="{{.BootstrapBrewPackages}}"
-BOOTSTRAP_CARGO_PACKAGES="{{.BootstrapCargoPackages}}"
 GIT_USER_NAME="{{.GitUserName}}"
 GIT_USER_EMAIL="{{.GitUserEmail}}"
 
-STARSHIP_CONFIG_PATH="${TARGET_HOME}/.config/starship.toml"
 FISH_CONFIG_DIR="${TARGET_HOME}/.config/fish"
 FISH_CONFIG_SNIPPET="${FISH_CONFIG_DIR}/conf.d/vmctl-shell.fish"
 FISH_SESSION_AUTOSTART_SNIPPET="${FISH_CONFIG_DIR}/conf.d/vmctl-session-autostart.fish"
@@ -91,14 +81,11 @@ LEGACY_OMP_SNIPPET="${FISH_CONFIG_DIR}/conf.d/oh-my-posh.fish"
 ZSHRC_PATH="${TARGET_HOME}/.zshrc"
 ZPROFILE_PATH="${TARGET_HOME}/.zprofile"
 BASH_PROFILE_PATH="${TARGET_HOME}/.bash_profile"
-RUSTUP_HOME="${TARGET_HOME}/.rustup"
-CARGO_HOME="${TARGET_HOME}/.cargo"
 LOCAL_BIN_DIR="${TARGET_HOME}/.local/bin"
 ZEN_INSTALL_DIR="${TARGET_HOME}/.local/opt/zen-browser"
 ZEN_APPIMAGE_PATH="${ZEN_INSTALL_DIR}/zen-aarch64.AppImage"
 ZEN_EXTRACT_DIR="${ZEN_INSTALL_DIR}/app"
 ZEN_WRAPPER_PATH="${LOCAL_BIN_DIR}/zen-browser"
-CARGO_INSTALL_TARGET_DIR="${TARGET_HOME}/.cache/cargo-install-target"
 ZEN_BROWSER_URL="https://github.com/zen-browser/desktop/releases/latest/download/zen-aarch64.AppImage"
 BOOTSTRAP_DNS_SERVERS="1.1.1.1 8.8.8.8"
 
@@ -153,42 +140,6 @@ retry_as_target_shell() {
   retry 5 as_target_shell "${cmd}"
 }
 
-default_brew_packages() {
-  cat <<'EOF'
-helix
-zellij
-zig
-opencode
-lazygit
-gitui
-EOF
-}
-
-default_cargo_packages() {
-  cat <<'EOF'
-fresh-editor fresh
-EOF
-}
-
-brew_packages() {
-  if [[ -n "${BOOTSTRAP_BREW_PACKAGES}" ]]; then
-    printf '%s\n' "${BOOTSTRAP_BREW_PACKAGES}" | tr ' ' '\n' | sed '/^$/d'
-    return 0
-  fi
-  default_brew_packages
-}
-
-cargo_packages() {
-  if [[ -n "${BOOTSTRAP_CARGO_PACKAGES}" ]]; then
-    printf '%s\n' "${BOOTSTRAP_CARGO_PACKAGES}" \
-      | tr ',' '\n' \
-      | sed 's/:/ /' \
-      | sed '/^$/d'
-    return 0
-  fi
-  default_cargo_packages
-}
-
 validate_choices() {
   case "${DEFAULT_SHELL}" in
     fish|zsh) ;;
@@ -232,16 +183,6 @@ repair_resolv_conf() {
   printf '%s' "${resolv_conf}" | as_root tee /etc/resolv.conf >/dev/null
 }
 
-install_starship() {
-  retry_as_target_shell "
-    export HOME=${TARGET_HOME@Q}
-    eval \"\$(${HOMEBREW_PREFIX@Q}/bin/brew shellenv)\"
-    if ! command -v starship >/dev/null 2>&1; then
-      brew install starship
-    fi
-  "
-}
-
 install_fnm_and_node() {
   retry_as_target_shell "
     export HOME=${TARGET_HOME@Q}
@@ -271,17 +212,6 @@ ensure_default_editor_installed() {
   "
 }
 
-install_rust() {
-  retry_as_target_shell "
-    export HOME=${TARGET_HOME@Q}
-    export CARGO_HOME=${CARGO_HOME@Q}
-    export RUSTUP_HOME=${RUSTUP_HOME@Q}
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
-    \"${CARGO_HOME}/bin/rustup\" toolchain install stable
-    \"${CARGO_HOME}/bin/rustup\" default stable
-  "
-}
-
 install_homebrew() {
   if [[ -x "${HOMEBREW_PREFIX}/bin/brew" ]]; then
     return 0
@@ -296,76 +226,49 @@ install_homebrew() {
   "
 }
 
-install_brew_packages() {
-  local packages=()
-  local package
-  while IFS= read -r package; do
-    [[ -n "${package}" ]] || continue
-    packages+=("${package}")
-  done < <(brew_packages)
+setup_docker() {
+  log "setting up Docker..."
 
-  [[ "${#packages[@]}" -gt 0 ]] || return 0
+  if ! command -v docker >/dev/null 2>&1; then
+    log "docker not found, skipping Docker setup"
+    return 0
+  fi
 
-  local brew_list=""
-  for package in "${packages[@]}"; do
-    brew_list+="${package}"$'\n'
-  done
+  as_root mkdir -p /usr/libexec/docker/cli-plugins
 
-  retry_as_target_shell "
-    export HOME=${TARGET_HOME@Q}
-    eval \"\$(${HOMEBREW_PREFIX@Q}/bin/brew shellenv)\"
-    while IFS= read -r package; do
-      [ -n \"\${package}\" ] || continue
-      if ! brew install \"\${package}\"; then
-        echo \"[guest-bootstrap] WARN: brew install failed for \${package}\" >&2
-      fi
-    done <<'SHELLEOF'
-${brew_list}
-SHELLEOF
-  "
-}
+  if [ ! -x /usr/libexec/docker/cli-plugins/docker-compose ]; then
+    log "installing docker-compose plugin..."
+    retry 3 curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64" -o /tmp/docker-compose
+    if [ -s /tmp/docker-compose ]; then
+      as_root mv /tmp/docker-compose /usr/libexec/docker/cli-plugins/docker-compose
+      as_root chmod 0755 /usr/libexec/docker/cli-plugins/docker-compose
+    fi
+    rm -f /tmp/docker-compose
+  fi
 
-install_cargo_packages() {
-  local specs=()
-  local spec
-  while IFS= read -r spec; do
-    [[ -n "${spec}" ]] || continue
-    specs+=("${spec}")
-  done < <(cargo_packages)
+  if [ ! -x /usr/libexec/docker/cli-plugins/docker-buildx ]; then
+    log "installing docker-buildx plugin..."
+    retry 3 curl -fsSL "https://github.com/docker/buildx/releases/latest/download/buildx-v0.24.0.linux-arm64" -o /tmp/docker-buildx
+    if [ -s /tmp/docker-buildx ]; then
+      as_root mv /tmp/docker-buildx /usr/libexec/docker/cli-plugins/docker-buildx
+      as_root chmod 0755 /usr/libexec/docker/cli-plugins/docker-buildx
+    fi
+    rm -f /tmp/docker-buildx
+  fi
 
-  [[ "${#specs[@]}" -gt 0 ]] || return 0
+  if [ -d /etc/sv/docker ]; then
+    as_root ln -snf /etc/sv/docker /var/service/docker 2>/dev/null || true
+    retry 3 as_root sv start docker 2>/dev/null || true
+  fi
 
-  local cargo_list=""
-  for spec in "${specs[@]}"; do
-    cargo_list+="${spec}"$'\n'
-  done
+  if getent group docker >/dev/null 2>&1; then
+    if ! id -nG "${TARGET_USER}" 2>/dev/null | grep -qw docker; then
+      as_root usermod -aG docker "${TARGET_USER}"
+      log "added ${TARGET_USER} to docker group (requires re-login)"
+    fi
+  fi
 
-  retry_as_target_shell "
-    export HOME=${TARGET_HOME@Q}
-    export CARGO_HOME=${CARGO_HOME@Q}
-    export PATH=${CARGO_HOME@Q}/bin:\$PATH
-    export CARGO_TARGET_DIR=${CARGO_INSTALL_TARGET_DIR@Q}
-    mkdir -p ${CARGO_INSTALL_TARGET_DIR@Q}
-    while IFS= read -r spec; do
-      [ -n \"\${spec}\" ] || continue
-      crate=\${spec%% *}
-      command_name=\${spec#* }
-      if [ \"\${command_name}\" = \"\${spec}\" ]; then
-        command_name=\${crate}
-      fi
-      if command -v \"\${command_name}\" >/dev/null 2>&1; then
-        continue
-      fi
-      if cargo install --list | grep -q \"^\${crate} v\"; then
-        continue
-      fi
-      if ! CARGO_BUILD_JOBS=1 cargo install --locked -j 1 \"\${crate}\"; then
-        echo \"[guest-bootstrap] WARN: cargo install failed for \${crate}\" >&2
-      fi
-    done <<'SHELLEOF'
-${cargo_list}
-SHELLEOF
-  "
+  log "Docker setup complete"
 }
 
 cleanup_legacy_prompt_config() {
@@ -827,10 +730,9 @@ main() {
   install_homebrew
   install_starship
   install_fnm_and_node
-  install_brew_packages
   ensure_default_editor_installed
-  install_cargo_packages
   install_zen_browser
+  setup_docker
   cleanup_legacy_prompt_config
   write_starship_config
   write_git_config
@@ -854,10 +756,14 @@ main() {
   set_default_shell
   mkdir -p ${TARGET_HOME}/repos ${TARGET_HOME}/projects
 {{if .ExtraCommands}}
-  log "running extra bootstrap commands..."
-  bash -lc "{{.ExtraCommands}}" || true
+  log "running hook scripts..."
+  cat > /tmp/vmctl-hooks.sh <<'VMCTLHOOKEOF'
+{{.ExtraCommands}}
+VMCTLHOOKEOF
+  bash /tmp/vmctl-hooks.sh || log "hooks completed with warnings"
+  rm -f /tmp/vmctl-hooks.sh
 {{end}}
-  log "configured ${DEFAULT_SHELL}, ${DEFAULT_EDITOR}, ${WINDOW_MANAGER}, fnm, Starship, Rust, Homebrew tools, Cargo tools, Ghostty, Zen Browser, Chromium, Fcitx5 Chinese input, timezone, and time sync for ${TARGET_USER}"
+  log "configured ${DEFAULT_SHELL}, ${DEFAULT_EDITOR}, ${WINDOW_MANAGER}, fnm, Starship, Rust, Homebrew tools, Docker, Ghostty, Zen Browser, Chromium, Fcitx5 Chinese input, timezone, and time sync for ${TARGET_USER}"
 }
 
 main "$@"

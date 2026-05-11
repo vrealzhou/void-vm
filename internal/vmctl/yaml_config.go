@@ -52,14 +52,7 @@ type GuestConfig struct {
 }
 
 type BootstrapConfig struct {
-	BrewPackages  []string           `yaml:"brew_packages"`
-	CargoPackages []CargoPackageSpec `yaml:"cargo_packages"`
-	Hooks         []string           `yaml:"hooks"`
-}
-
-type CargoPackageSpec struct {
-	Crate   string `yaml:"crate"`
-	Command string `yaml:"command"`
+	HookScripts []string `yaml:"hook_scripts"`
 }
 
 type GitConfig struct {

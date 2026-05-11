@@ -39,13 +39,11 @@ type Config struct {
 	DefaultShell           string
 	DefaultEditor          string
 	WindowManager          string
-	StarshipPresetURL      string
-	BootstrapBrewPackages  string
-	BootstrapCargoPackages string
 	GitUserName            string
 	GitUserEmail           string
 	SetDefaultShell        bool
 	BootstrapExtraCommands string
+	BootstrapHookScripts   []string
 	VoidRepository         string
 	ImageDir               string
 	BaseImage              string
@@ -54,9 +52,9 @@ type Config struct {
 	GUI                    bool
 	Width                  int
 	Height                 int
-	ConfigDir  string
-	SyncPairs  []SyncPair
-	Tunnels    []Tunnel
+	ConfigDir              string
+	SyncPairs              []SyncPair
+	Tunnels                []Tunnel
 }
 
 func LoadConfig() (Config, error) {
@@ -83,19 +81,18 @@ func LoadConfig() (Config, error) {
 
 	dnsServersStr := strings.Join(vcfg.Network.DNSServers, " ")
 
-	brewPackagesStr := strings.Join(vcfg.Bootstrap.BrewPackages, " ")
+	extraCommands := ""
 
-	var cargoParts []string
-	for _, cp := range vcfg.Bootstrap.CargoPackages {
-		cmd := cp.Command
-		if cmd == "" {
-			cmd = cp.Crate
+	for _, path := range vcfg.Bootstrap.HookScripts {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return Config{}, fmt.Errorf("failed to read hook script %q: %w", path, err)
 		}
-		cargoParts = append(cargoParts, cp.Crate+":"+cmd)
+		if extraCommands != "" {
+			extraCommands += "\n"
+		}
+		extraCommands += string(content)
 	}
-	cargoPackagesStr := strings.Join(cargoParts, ",")
-
-	extraCommands := strings.Join(vcfg.Bootstrap.Hooks, "\n")
 
 	stateDir := filepath.Join(configDir, vcfg.VM.Name)
 	imageDir := filepath.Join(configDir, "images")
@@ -132,13 +129,11 @@ func LoadConfig() (Config, error) {
 		DefaultShell:           vcfg.Guest.DefaultShell,
 		DefaultEditor:          vcfg.Guest.DefaultEditor,
 		WindowManager:          vcfg.Guest.WindowManager,
-		StarshipPresetURL:      "https://starship.rs/presets/toml/tokyo-night.toml",
-		BootstrapBrewPackages:  brewPackagesStr,
-		BootstrapCargoPackages: cargoPackagesStr,
 		GitUserName:            vcfg.Git.UserName,
 		GitUserEmail:           vcfg.Git.UserEmail,
 		SetDefaultShell:        true,
 		BootstrapExtraCommands: extraCommands,
+		BootstrapHookScripts:   vcfg.Bootstrap.HookScripts,
 		VoidRepository:         "https://repo-default.voidlinux.org",
 		ImageDir:               imageDir,
 		BaseImage:              "",
@@ -247,22 +242,7 @@ func SaveConfig(cfg Config) error {
 		vcfg.Network.DNSServers = strings.Fields(cfg.DNSServers)
 	}
 
-	vcfg.Bootstrap.BrewPackages = strings.Fields(cfg.BootstrapBrewPackages)
-	for _, entry := range strings.Split(cfg.BootstrapCargoPackages, ",") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		parts := strings.SplitN(entry, ":", 2)
-		cs := CargoPackageSpec{Crate: parts[0]}
-		if len(parts) == 2 {
-			cs.Command = parts[1]
-		}
-		vcfg.Bootstrap.CargoPackages = append(vcfg.Bootstrap.CargoPackages, cs)
-	}
-	if cfg.BootstrapExtraCommands != "" {
-		vcfg.Bootstrap.Hooks = strings.Split(strings.TrimSpace(cfg.BootstrapExtraCommands), "\n")
-	}
+	vcfg.Bootstrap.HookScripts = cfg.BootstrapHookScripts
 
 	vcfg.applyDefaults()
 	return saveVMConfigFile(yamlPath, vcfg)

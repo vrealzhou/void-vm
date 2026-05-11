@@ -86,14 +86,8 @@ guest:
   window_manager: xfce
 
 bootstrap:
-  brew_packages:
-    - helix
-    - zig
-  cargo_packages:
-    - crate: fresh-editor
-      command: fresh
-  hooks:
-    - "echo done"
+  hook_scripts:
+    - /tmp/test-hook.sh
 
 git:
   user_name: Test User
@@ -137,14 +131,8 @@ tunnels:
 	if cfg.Guest.DefaultShell != "zsh" {
 		t.Errorf("expected shell 'zsh', got %q", cfg.Guest.DefaultShell)
 	}
-	if len(cfg.Bootstrap.BrewPackages) != 2 {
-		t.Errorf("expected 2 brew packages, got %d", len(cfg.Bootstrap.BrewPackages))
-	}
-	if len(cfg.Bootstrap.CargoPackages) != 1 {
-		t.Errorf("expected 1 cargo package, got %d", len(cfg.Bootstrap.CargoPackages))
-	}
-	if len(cfg.Bootstrap.Hooks) != 1 {
-		t.Errorf("expected 1 hook, got %d", len(cfg.Bootstrap.Hooks))
+	if len(cfg.Bootstrap.HookScripts) != 1 {
+		t.Errorf("expected 1 hook script, got %d", len(cfg.Bootstrap.HookScripts))
 	}
 	if len(cfg.Sync) != 1 {
 		t.Errorf("expected 1 sync pair, got %d", len(cfg.Sync))
@@ -164,7 +152,7 @@ func TestSaveAndReloadConfig(t *testing.T) {
 	cfg := VMConfigFile{}
 	cfg.applyDefaults()
 	cfg.VM.Name = "roundtrip"
-	cfg.Bootstrap.BrewPackages = []string{"test-pkg"}
+	cfg.Bootstrap.HookScripts = []string{"/tmp/test.sh"}
 
 	if err := saveVMConfigFile(yamlPath, cfg); err != nil {
 		t.Fatalf("save failed: %v", err)
@@ -177,7 +165,7 @@ func TestSaveAndReloadConfig(t *testing.T) {
 	if reloaded.VM.Name != "roundtrip" {
 		t.Errorf("expected 'roundtrip', got %q", reloaded.VM.Name)
 	}
-	if len(reloaded.Bootstrap.BrewPackages) != 1 {
-		t.Errorf("expected 1 brew package, got %d", len(reloaded.Bootstrap.BrewPackages))
+	if len(reloaded.Bootstrap.HookScripts) != 1 {
+		t.Errorf("expected 1 hook script, got %d", len(reloaded.Bootstrap.HookScripts))
 	}
 }

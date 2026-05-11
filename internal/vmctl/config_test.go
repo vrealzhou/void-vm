@@ -79,7 +79,6 @@ func TestSaveAndLoadConfigRoundtrip(t *testing.T) {
 	}
 	cfg.GuestUser = "customuser"
 	cfg.CPUs = 8
-	cfg.BootstrapBrewPackages = "helix zig"
 
 	if err := SaveConfig(cfg); err != nil {
 		t.Fatalf("SaveConfig failed: %v", err)
@@ -94,8 +93,5 @@ func TestSaveAndLoadConfigRoundtrip(t *testing.T) {
 	}
 	if cfg2.CPUs != 8 {
 		t.Errorf("expected 8 CPUs, got %d", cfg2.CPUs)
-	}
-	if cfg2.BootstrapBrewPackages != "helix zig" {
-		t.Errorf("expected 'helix zig', got %q", cfg2.BootstrapBrewPackages)
 	}
 }

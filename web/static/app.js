@@ -196,9 +196,7 @@ els.btnBootstrap.onclick = () => {
         <div class="form-group"><label>Memory (MiB)</label><input id="bootstrap-memory" type="number" placeholder="6144" value="${c.memoryMiB || 6144}"></div>
         <div class="form-group"><label>Disk size</label><input id="bootstrap-disk" placeholder="100G" value="${c.diskSize || '100G'}"></div>
         <div class="form-group"><label>Guest IP address</label><input id="bootstrap-ip" placeholder="192.168.64.10" value="${c.staticIP || '192.168.64.10'}"></div>
-        <div class="form-group"><label>Brew packages (space-separated)</label><input id="bootstrap-brew-packages" placeholder="helix zellij zig" value="${Array.isArray(c.brewPackages) ? c.brewPackages.join(' ') : (c.brewPackages || '')}"></div>
-        <div class="form-group"><label>Cargo packages (comma-separated, crate:binary)</label><input id="bootstrap-cargo-packages" placeholder="fresh-editor:fresh" value="${Array.isArray(c.cargoPackages) ? c.cargoPackages.map(p => p.crate + ':' + (p.command || p.crate)).join(',') : (c.cargoPackages || '')}"></div>
-        <div class="form-group"><label>Post-bootstrap hooks (one per line)</label><textarea id="bootstrap-hooks" rows="5" placeholder="echo custom setup done">${c.hooks || ''}</textarea></div>
+        <div class="form-group"><label>Hook scripts (one path per line)</label><textarea id="bootstrap-hook-scripts" rows="5" placeholder="/path/to/hooks.sh">${Array.isArray(c.hookScripts) ? c.hookScripts.join('\n') : (c.hookScripts || '')}</textarea></div>
         <div class="form-group"><label>Git user name</label><input id="bootstrap-git-user" placeholder="Your Name" value="${c.userName || ''}"></div>
         <div class="form-group"><label>Git user email</label><input id="bootstrap-git-email" placeholder="you@example.com" value="${c.userEmail || ''}"></div>
     `, async () => {
@@ -208,8 +206,6 @@ els.btnBootstrap.onclick = () => {
                 shell: document.getElementById('bootstrap-shell').value,
                 editor: document.getElementById('bootstrap-editor').value,
                 windowManager: document.getElementById('bootstrap-wm').value,
-                brewPackages: document.getElementById('bootstrap-brew-packages').value.trim(),
-                cargoPackages: document.getElementById('bootstrap-cargo-packages').value.trim(),
             };
             const mem = parseInt(document.getElementById('bootstrap-memory').value);
             const disk = document.getElementById('bootstrap-disk').value.trim();
@@ -217,7 +213,8 @@ els.btnBootstrap.onclick = () => {
             if (mem > 0) body.memoryMiB = mem;
             if (disk) body.diskSize = disk;
             if (ip) body.staticIP = ip;
-            body.hooks = document.getElementById('bootstrap-hooks').value.trim();
+            const hookScriptsText = document.getElementById('bootstrap-hook-scripts').value.trim();
+            body.hookScripts = hookScriptsText ? hookScriptsText.split('\n').map(s => s.trim()).filter(s => s) : [];
             body.userName = document.getElementById('bootstrap-git-user').value.trim();
             body.userEmail = document.getElementById('bootstrap-git-email').value.trim();
             await API.post('/api/bootstrap', body);
